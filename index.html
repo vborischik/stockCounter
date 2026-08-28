@@ -606,6 +606,16 @@
     return ((10 - (sum % 10)) % 10) === check;
   }
 
+  // A UPC-A label is physically a 12-digit code, but EAN-13 decoders report it
+  // padded with a leading zero. Prefixes 0xx are reserved for UPC-A, so a
+  // 13-digit result starting with 0 is always the padded form — strip it back.
+  function normalize(code, format){
+    const f = String(format || '').toLowerCase();
+    const looksEan = f === '' || f.indexOf('ean') !== -1 || f.indexOf('upc_a') !== -1;
+    if(looksEan && /^0\d{12}$/.test(code)) return code.slice(1);
+    return code;
+  }
+
   function reject(code, why){
     logRead(code, 0, why);
     return false;
@@ -652,6 +662,7 @@
 
   function vote(code, format){
     if(awaitingConfirm || !scanning) return;
+    code = normalize(code, format);
     if(!plausible(code, format)) return;
     const now = Date.now();
     votes = votes.filter(v => now - v.t < VOTE_WINDOW_MS);
