@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Stock Count Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+  :root{
+    --bg: #13150F;
+    --panel: #1B1E15;
+    --panel-2: #21241A;
+    --line: #34382A;
+    --text: #F3F1E7;
+    --muted: #8C8E7C;
+    --laser: #FF3B30;
+    --led: #4ADE80;
+    --led-dim: #2F6B44;
+    --amber: #F5A623;
+    --danger: #E85C4A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .app{
+    max-width:520px;
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+    border-left:1px solid var(--line);
+    border-right:1px solid var(--line);
+  }
+
+  /* Header */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 16px;
+    border-bottom:1px solid var(--line);
+    position:sticky;
+    top:0;
+    background:var(--bg);
+    z-index:20;
+  }
+  .brand{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .brand-title{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:700;
+    letter-spacing:0.14em;
+    font-size:13px;
+    text-transform:uppercase;
+    color:var(--text);
+  }
+  .brand-sub{
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.02em;
+  }
+  .count-badge{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:20px;
+    font-weight:700;
+    color:var(--led);
+    text-shadow:0 0 12px rgba(74,222,128,0.35);
+    font-variant-numeric:tabular-nums;
+  }
+  .count-label{
+    font-size:9px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    text-align:right;
+  }
+
+  /* Scanner viewfinder */
+  .scan-section{
+    padding:16px;
+    border-bottom:1px solid var(--line);
+  }
+  .viewfinder{
+    position:relative;
+    width:100%;
+    aspect-ratio:4/3;
+    background:#000;
+    border-radius:6px;
+    overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .viewfinder video, .viewfinder canvas{
+    position:absolute;
+    top:0;left:0;width:100%;height:100%;
+    object-fit:cover;
+  }
+  .viewfinder.idle::after{
+    content:"CAMERA OFF";
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.18em;
+    color:var(--muted);
+    background:var(--panel);
+  }
+  .frame-corners span{
+    position:absolute;
+    width:22px;height:22px;
+    border-color:var(--led);
+    opacity:0.85;
+  }
+  .fc-tl{top:10px;left:10px;border-top:2px solid var(--led);border-left:2px solid var(--led);}
+  .fc-tr{top:10px;right:10px;border-top:2px solid var(--led);border-right:2px solid var(--led);}
+  .fc-bl{bottom:10px;left:10px;border-bottom:2px solid var(--led);border-left:2px solid var(--led);}
+  .fc-br{bottom:10px;right:10px;border-bottom:2px solid var(--led);border-right:2px solid var(--led);}
+  .laser-line{
+    position:absolute;
+    left:6%;right:6%;
+    height:2px;
+    background:var(--laser);
+    box-shadow:0 0 8px 1px rgba(255,59,48,0.8);
+    top:50%;
+    display:none;
+  }
+  .viewfinder.scanning .laser-line{
+    display:block;
+    animation:sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes sweep{
+    0%{top:14%;}
+    50%{top:86%;}
+    100%{top:14%;}
+  }
+  .viewfinder.flash{
+    animation:flashok 0.35s ease-out;
+  }
+  @keyframes flashok{
+    0%{box-shadow: inset 0 0 0 3px var(--led);}
+    100%{box-shadow: inset 0 0 0 0px transparent;}
+  }
+
+  .scan-controls{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+  }
+  button{
+    font-family:'Inter',sans-serif;
+    cursor:pointer;
+    border:none;
+    border-radius:5px;
+    font-weight:600;
+  }
+  .btn-primary{
+    flex:1;
+    background:var(--led);
+    color:#0B2013;
+    padding:13px 16px;
+    font-size:14px;
+    letter-spacing:0.01em;
+  }
+  .btn-primary:active{background:#3fc471;}
+  .btn-stop{
+    flex:1;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:13px 16px;
+    font-size:14px;
+  }
+  .cam-status{
+    margin-top:8px;
+    font-size:11px;
+    color:var(--muted);
+    min-height:14px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .cam-status.err{color:var(--danger);}
+
+  /* Manual entry */
+  .manual-row{
+    display:flex;
+    gap:8px;
+    margin-top:14px;
+  }
+  .manual-row input{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:5px;
+    color:var(--text);
+    padding:11px 12px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:14px;
+  }
+  .manual-row input:focus{outline:1px solid var(--led);}
+  .manual-row button{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:0 16px;
+    font-size:13px;
+  }
+  .manual-label{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:var(--muted);
+    margin-top:14px;
+  }
+
+  /* Confirm panel (modal-ish, inline) */
+  .confirm-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(10,11,7,0.72);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    z-index:50;
+  }
+  .confirm-overlay.open{display:flex;}
+  .confirm-card{
+    width:100%;
+    max-width:520px;
+    background:var(--panel);
+    border-top:1px solid var(--line);
+    border-radius:14px 14px 0 0;
+    padding:20px 18px 24px;
+  }
+  .confirm-barcode-label{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.14em;
+    color:var(--muted);
+  }
+  .confirm-barcode{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:26px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    margin:4px 0 4px;
+    word-break:break-all;
+  }
+  .confirm-hint{
+    font-size:12px;
+    color:var(--amber);
+    margin-bottom:14px;
+    min-height:16px;
+  }
+  .qty-row{
+    display:flex;
+    align-items:stretch;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .qty-step{
+    width:52px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-size:20px;
+    border-radius:6px;
+  }
+  .qty-input{
+    flex:1;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:6px;
+    color:var(--led);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:28px;
+    font-weight:700;
+    text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .qty-input:focus{outline:1px solid var(--led);}
+  .confirm-actions{
+    display:flex;
+    gap:10px;
+  }
+  .btn-save{
+    flex:2;
+    background:var(--led);
+    color:#0B2013;
+    padding:14px;
+    font-size:15px;
+  }
+  .btn-cancel{
+    flex:1;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--muted);
+    padding:14px;
+    font-size:14px;
+  }
+
+  /* History */
+  .history-section{
+    padding:16px;
+    flex:1;
+  }
+  .history-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    cursor:pointer;
+  }
+  .history-title{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text);
+  }
+  .chevron{
+    color:var(--muted);
+    font-size:12px;
+    transition:transform 0.15s;
+  }
+  .chevron.open{transform:rotate(180deg);}
+  .history-body{display:none;margin-top:12px;}
+  .history-body.open{display:block;}
+  .search-input{
+    width:100%;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:5px;
+    color:var(--text);
+    padding:9px 10px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    margin-bottom:10px;
+  }
+  .item-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 4px;
+    border-bottom:1px solid var(--line);
+  }
+  .item-code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    color:var(--text);
+  }
+  .item-time{
+    font-size:10px;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .item-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .item-qty{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:16px;
+    color:var(--led);
+    font-weight:700;
+    min-width:40px;
+    text-align:right;
+    font-variant-numeric:tabular-nums;
+  }
+  .item-del{
+    background:transparent;
+    border:none;
+    color:var(--muted);
+    font-size:16px;
+    padding:4px 6px;
+  }
+  .item-del:active{color:var(--danger);}
+  .empty-state{
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+    padding:24px 0;
+  }
+
+  /* Footer */
+  .footer{
+    position:sticky;
+    bottom:0;
+    display:flex;
+    gap:8px;
+    padding:12px 16px;
+    background:var(--bg);
+    border-top:1px solid var(--line);
+  }
+  .btn-export{
+    flex:2;
+    background:var(--amber);
+    color:#241A02;
+    padding:13px;
+    font-size:14px;
+  }
+  .btn-clear{
+    flex:1;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--danger);
+    padding:13px;
+    font-size:13px;
+  }
+  .save-note{
+    text-align:center;
+    font-size:10px;
+    color:var(--muted);
+    padding:0 16px 10px;
+    letter-spacing:0.03em;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-title">Stock Count</div>
+      <div class="brand-sub">Scan &rarr; enter qty &rarr; export</div>
+    </div>
+    <div>
+      <div class="count-badge mono" id="countBadge">0</div>
+      <div class="count-label">counted</div>
+    </div>
+  </div>
+
+  <div class="scan-section">
+    <div class="viewfinder idle" id="viewfinder">
+      <div class="frame-corners">
+        <span class="fc-tl"></span><span class="fc-tr"></span>
+        <span class="fc-bl"></span><span class="fc-br"></span>
+      </div>
+      <div class="laser-line" id="laserLine"></div>
+    </div>
+    <div class="scan-controls">
+      <button class="btn-primary" id="startBtn">Start Scanning</button>
+      <button class="btn-stop" id="stopBtn" style="display:none;">Stop</button>
+    </div>
+    <div class="cam-status" id="camStatus"></div>
+
+    <div class="manual-label">Or enter barcode manually</div>
+    <div class="manual-row">
+      <input type="text" id="manualInput" inputmode="numeric" placeholder="Type or paste stock code">
+      <button id="manualBtn">Add</button>
+    </div>
+  </div>
+
+  <div class="history-section">
+    <div class="history-header" id="historyHeader">
+      <div class="history-title">Counted items</div>
+      <div class="chevron" id="chevron">&#9660;</div>
+    </div>
+    <div class="history-body" id="historyBody">
+      <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
+      <div id="listContainer"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <button class="btn-export" id="exportBtn">Export CSV</button>
+    <button class="btn-clear" id="clearBtn">Clear all</button>
+  </div>
+  <div class="save-note">Progress auto-saves to this browser</div>
+</div>
+
+<!-- Confirm quantity overlay -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-card">
+    <div class="confirm-barcode-label">Stock code</div>
+    <div class="confirm-barcode mono" id="confirmBarcode">—</div>
+    <div class="confirm-hint" id="confirmHint"></div>
+    <div class="qty-row">
+      <button class="qty-step" id="qtyMinus">&minus;</button>
+      <input type="number" class="qty-input" id="qtyInput" inputmode="numeric" step="1" placeholder="0">
+      <button class="qty-step" id="qtyPlus">+</button>
+    </div>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="qtyCancel">Cancel</button>
+      <button class="btn-save" id="qtySave">Save &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'counts';
+  let counts = {}; // { barcode: { qty, ts } }
+  let scanning = false;
+  let awaitingConfirm = false;
+  let currentBarcode = null;
+
+  const el = (id) => document.getElementById(id);
+  const viewfinder = el('viewfinder');
+  const startBtn = el('startBtn');
+  const stopBtn = el('stopBtn');
+  const camStatus = el('camStatus');
+  const countBadge = el('countBadge');
+  const manualInput = el('manualInput');
+  const manualBtn = el('manualBtn');
+  const confirmOverlay = el('confirmOverlay');
+  const confirmBarcode = el('confirmBarcode');
+  const confirmHint = el('confirmHint');
+  const qtyInput = el('qtyInput');
+  const qtySave = el('qtySave');
+  const qtyCancel = el('qtyCancel');
+  const qtyMinus = el('qtyMinus');
+  const qtyPlus = el('qtyPlus');
+  const historyHeader = el('historyHeader');
+  const historyBody = el('historyBody');
+  const chevron = el('chevron');
+  const listContainer = el('listContainer');
+  const searchInput = el('searchInput');
+  const exportBtn = el('exportBtn');
+  const clearBtn = el('clearBtn');
+
+  // ---------- storage ----------
+  async function loadState(){
+    try{
+      const res = await window.storage.get(STORAGE_KEY, false);
+      if(res && res.value){ counts = JSON.parse(res.value); }
+    }catch(e){ counts = {}; }
+    refreshCount();
+  }
+  let saveTimer = null;
+  function saveState(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try{ await window.storage.set(STORAGE_KEY, JSON.stringify(counts), false); }
+      catch(e){ console.error('save failed', e); }
+    }, 150);
+  }
+
+  function refreshCount(){
+    countBadge.textContent = Object.keys(counts).length.toLocaleString();
+  }
+
+  // ---------- camera scanning (Quagga) ----------
+  function startScanning(){
+    camStatus.textContent = 'Requesting camera…';
+    camStatus.classList.remove('err');
+    Quagga.init({
+      inputStream: {
+        type: 'LiveStream',
+        target: viewfinder,
+        constraints: { facingMode: 'environment', width: 640, height: 480 }
+      },
+      decoder: {
+        readers: ['upc_reader','upc_e_reader','ean_reader','ean_8_reader','code_128_reader']
+      },
+      locate: true,
+      numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2,
+      frequency: 8
+    }, function(err){
+      if(err){
+        console.error(err);
+        camStatus.textContent = 'Camera unavailable here — this can happen inside an embedded preview. Try opening this file directly in your phone\'s browser, or use manual entry below.';
+        camStatus.classList.add('err');
+        return;
+      }
+      Quagga.start();
+      scanning = true;
+      viewfinder.classList.remove('idle');
+      viewfinder.classList.add('scanning');
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'block';
+      camStatus.textContent = 'Scanning… point camera at a barcode';
+      // Quagga injects its own <video>/<canvas> into target; make sure it fills the frame
+      const vc = viewfinder.querySelector('video');
+      if(vc){ vc.style.position='absolute'; vc.style.top=0; vc.style.left=0; vc.style.width='100%'; vc.style.height='100%'; vc.style.objectFit='cover'; }
+      const cv = viewfinder.querySelector('canvas.drawingBuffer');
+      if(cv){ cv.style.display='none'; }
+    });
+
+    Quagga.onDetected(handleDetected);
+  }
+
+  function stopScanning(){
+    try{ Quagga.offDetected(handleDetected); Quagga.stop(); }catch(e){}
+    scanning = false;
+    viewfinder.classList.add('idle');
+    viewfinder.classList.remove('scanning');
+    startBtn.style.display = 'block';
+    stopBtn.style.display = 'none';
+    camStatus.textContent = '';
+  }
+
+  function handleDetected(result){
+    if(awaitingConfirm) return;
+    const code = result && result.codeResult && result.codeResult.code;
+    if(!code) return;
+    if(navigator.vibrate) navigator.vibrate(60);
+    viewfinder.classList.add('flash');
+    setTimeout(()=>viewfinder.classList.remove('flash'), 350);
+    openConfirm(code.trim());
+  }
+
+  // ---------- confirm panel ----------
+  function openConfirm(barcode){
+    awaitingConfirm = true;
+    currentBarcode = barcode;
+    confirmBarcode.textContent = barcode;
+    const existing = counts[barcode];
+    if(existing){
+      confirmHint.textContent = 'Already counted — last entered: ' + existing.qty + '. Saving will overwrite it.';
+      qtyInput.value = existing.qty;
+    }else{
+      confirmHint.textContent = 'New item';
+      qtyInput.value = '';
+    }
+    confirmOverlay.classList.add('open');
+    setTimeout(()=>{ qtyInput.focus(); qtyInput.select(); }, 50);
+  }
+
+  function closeConfirm(){
+    confirmOverlay.classList.remove('open');
+    awaitingConfirm = false;
+    currentBarcode = null;
+  }
+
+  function saveCurrent(){
+    if(!currentBarcode) return;
+    const val = qtyInput.value.trim();
+    if(val === ''){ qtyInput.focus(); return; }
+    counts[currentBarcode] = { qty: val, ts: Date.now() };
+    saveState();
+    refreshCount();
+    renderList();
+    closeConfirm();
+  }
+
+  qtySave.addEventListener('click', saveCurrent);
+  qtyCancel.addEventListener('click', closeConfirm);
+  qtyInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrent(); } });
+  qtyMinus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') - 1).toString(); });
+  qtyPlus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') + 1).toString(); });
+
+  startBtn.addEventListener('click', startScanning);
+  stopBtn.addEventListener('click', stopScanning);
+
+  manualBtn.addEventListener('click', () => {
+    const v = manualInput.value.trim();
+    if(!v) return;
+    manualInput.value = '';
+    openConfirm(v);
+  });
+  manualInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); manualBtn.click(); }
+  });
+
+  // ---------- history list ----------
+  historyHeader.addEventListener('click', () => {
+    const open = historyBody.classList.toggle('open');
+    chevron.classList.toggle('open', open);
+    if(open) renderList();
+  });
+
+  function renderList(){
+    const filter = searchInput.value.trim().toLowerCase();
+    const entries = Object.entries(counts)
+      .filter(([code]) => !filter || code.toLowerCase().includes(filter))
+      .sort((a,b) => (b[1].ts||0) - (a[1].ts||0))
+      .slice(0, 200); // cap render for performance; use search to find older ones
+
+    if(entries.length === 0){
+      listContainer.innerHTML = '<div class="empty-state">No items counted yet.</div>';
+      return;
+    }
+    listContainer.innerHTML = entries.map(([code, data]) => {
+      const time = data.ts ? new Date(data.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+      return `<div class="item-row" data-code="${escapeHtml(code)}">
+        <div>
+          <div class="item-code">${escapeHtml(code)}</div>
+          <div class="item-time">${time}</div>
+        </div>
+        <div class="item-right">
+          <div class="item-qty">${escapeHtml(String(data.qty))}</div>
+          <button class="item-del" data-del="${escapeHtml(code)}">&#10005;</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  listContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-del]');
+    if(btn){
+      const code = btn.getAttribute('data-del');
+      delete counts[code];
+      saveState();
+      refreshCount();
+      renderList();
+      return;
+    }
+    const row = e.target.closest('.item-row');
+    if(row){
+      openConfirm(row.getAttribute('data-code'));
+    }
+  });
+
+  searchInput.addEventListener('input', renderList);
+
+  // ---------- export / clear ----------
+  exportBtn.addEventListener('click', () => {
+    const entries = Object.entries(counts);
+    if(entries.length === 0){ alert('No items counted yet.'); return; }
+    const lines = entries.map(([code, data]) => `${code},${data.qty}`);
+    const csv = lines.join('\n') + '\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.href = url;
+    a.download = `stock-count-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if(Object.keys(counts).length === 0) return;
+    if(!confirm('Clear all counted items? This cannot be undone.')) return;
+    counts = {};
+    saveState();
+    refreshCount();
+    renderList();
+  });
+
+  loadState();
+})();
+</script>
+</body>
+</html>
