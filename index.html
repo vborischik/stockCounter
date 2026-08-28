@@ -54,11 +54,7 @@
     background:var(--bg);
     z-index:20;
   }
-  .brand{
-    display:flex;
-    flex-direction:column;
-    gap:2px;
-  }
+  .brand{display:flex;flex-direction:column;gap:2px;}
   .brand-title{
     font-family:'IBM Plex Mono',monospace;
     font-weight:700;
@@ -67,11 +63,7 @@
     text-transform:uppercase;
     color:var(--text);
   }
-  .brand-sub{
-    font-size:11px;
-    color:var(--muted);
-    letter-spacing:0.02em;
-  }
+  .brand-sub{font-size:11px;color:var(--muted);letter-spacing:0.02em;}
   .count-badge{
     font-family:'IBM Plex Mono',monospace;
     font-size:20px;
@@ -89,10 +81,7 @@
   }
 
   /* Scanner viewfinder */
-  .scan-section{
-    padding:16px;
-    border-bottom:1px solid var(--line);
-  }
+  .scan-section{padding:16px;border-bottom:1px solid var(--line);}
   .viewfinder{
     position:relative;
     width:100%;
@@ -106,6 +95,7 @@
     position:absolute;
     top:0;left:0;width:100%;height:100%;
     object-fit:cover;
+    z-index:0;
   }
   .viewfinder.idle::after{
     content:"CAMERA OFF";
@@ -119,7 +109,9 @@
     letter-spacing:0.18em;
     color:var(--muted);
     background:var(--panel);
+    z-index:5;
   }
+  .frame-corners{position:absolute;inset:0;z-index:3;pointer-events:none;}
   .frame-corners span{
     position:absolute;
     width:22px;height:22px;
@@ -138,32 +130,26 @@
     box-shadow:0 0 8px 1px rgba(255,59,48,0.8);
     top:50%;
     display:none;
+    z-index:3;
+    pointer-events:none;
   }
-  .viewfinder.scanning .laser-line{
-    display:block;
-    animation:sweep 1.6s ease-in-out infinite;
-  }
-  @keyframes sweep{
-    0%{top:14%;}
-    50%{top:86%;}
-    100%{top:14%;}
-  }
-  .viewfinder.flash{
-    animation:flashok 0.35s ease-out;
-  }
+  .viewfinder.scanning .laser-line{display:block;animation:sweep 1.6s ease-in-out infinite;}
+  @keyframes sweep{0%{top:14%;}50%{top:86%;}100%{top:14%;}}
+  .viewfinder.flash{animation:flashok 0.35s ease-out;}
   @keyframes flashok{
     0%{box-shadow: inset 0 0 0 3px var(--led);}
     100%{box-shadow: inset 0 0 0 0px transparent;}
   }
-  /* lock-on meter: fills as the same code is read repeatedly */
   .lock-wrap{
     position:absolute;
     left:6%;right:6%;bottom:14px;
     height:4px;
-    background:rgba(243,241,231,0.14);
+    background:rgba(243,241,231,0.16);
     border-radius:2px;
     display:none;
     overflow:hidden;
+    z-index:4;
+    pointer-events:none;
   }
   .viewfinder.scanning .lock-wrap{display:block;}
   .lock-fill{
@@ -174,11 +160,7 @@
     transition:width 0.1s linear;
   }
 
-  .scan-controls{
-    display:flex;
-    gap:8px;
-    margin-top:12px;
-  }
+  .scan-controls{display:flex;gap:8px;margin-top:12px;}
   button{
     font-family:'Inter',sans-serif;
     cursor:pointer;
@@ -222,6 +204,23 @@
   }
   .cam-status.err{color:var(--danger);}
 
+  /* Live decoder readout */
+  .readout{
+    margin-top:8px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:9px 11px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--muted);
+    display:none;
+    line-height:1.6;
+  }
+  .readout.show{display:block;}
+  .readout b{color:var(--text);font-weight:500;}
+  .readout .rejected{color:var(--danger);}
+
   /* Symbology picker */
   .fmt-label{
     font-size:10px;
@@ -230,12 +229,7 @@
     color:var(--muted);
     margin-top:16px;
   }
-  .fmt-row{
-    display:flex;
-    gap:6px;
-    margin-top:8px;
-    flex-wrap:wrap;
-  }
+  .fmt-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
   .fmt-chip{
     background:var(--panel);
     border:1px solid var(--line);
@@ -249,11 +243,7 @@
   .fmt-chip.active{border-color:var(--led);color:var(--led);}
 
   /* Manual entry */
-  .manual-row{
-    display:flex;
-    gap:8px;
-    margin-top:8px;
-  }
+  .manual-row{display:flex;gap:8px;margin-top:8px;}
   .manual-row input{
     flex:1;
     background:var(--panel);
@@ -280,7 +270,7 @@
     margin-top:16px;
   }
 
-  /* Confirm panel (modal-ish, inline) */
+  /* Confirm panel */
   .confirm-overlay{
     position:fixed;
     inset:0;
@@ -327,12 +317,7 @@
     margin-bottom:14px;
     min-height:16px;
   }
-  .qty-row{
-    display:flex;
-    align-items:stretch;
-    gap:8px;
-    margin-bottom:16px;
-  }
+  .qty-row{display:flex;align-items:stretch;gap:8px;margin-bottom:16px;}
   .qty-step{
     width:52px;
     background:var(--panel-2);
@@ -354,17 +339,8 @@
     font-variant-numeric:tabular-nums;
   }
   .qty-input:focus{outline:1px solid var(--led);}
-  .confirm-actions{
-    display:flex;
-    gap:10px;
-  }
-  .btn-save{
-    flex:2;
-    background:var(--led);
-    color:#0B2013;
-    padding:14px;
-    font-size:15px;
-  }
+  .confirm-actions{display:flex;gap:10px;}
+  .btn-save{flex:2;background:var(--led);color:#0B2013;padding:14px;font-size:15px;}
   .btn-cancel{
     flex:1;
     background:transparent;
@@ -375,16 +351,8 @@
   }
 
   /* History */
-  .history-section{
-    padding:16px;
-    flex:1;
-  }
-  .history-header{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    cursor:pointer;
-  }
+  .history-section{padding:16px;flex:1;}
+  .history-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
   .history-title{
     font-family:'IBM Plex Mono',monospace;
     font-size:12px;
@@ -392,11 +360,7 @@
     text-transform:uppercase;
     color:var(--text);
   }
-  .chevron{
-    color:var(--muted);
-    font-size:12px;
-    transition:transform 0.15s;
-  }
+  .chevron{color:var(--muted);font-size:12px;transition:transform 0.15s;}
   .chevron.open{transform:rotate(180deg);}
   .history-body{display:none;margin-top:12px;}
   .history-body.open{display:block;}
@@ -418,21 +382,9 @@
     padding:10px 4px;
     border-bottom:1px solid var(--line);
   }
-  .item-code{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:13px;
-    color:var(--text);
-  }
-  .item-time{
-    font-size:10px;
-    color:var(--muted);
-    margin-top:2px;
-  }
-  .item-right{
-    display:flex;
-    align-items:center;
-    gap:10px;
-  }
+  .item-code{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}
+  .item-time{font-size:10px;color:var(--muted);margin-top:2px;}
+  .item-right{display:flex;align-items:center;gap:10px;}
   .item-qty{
     font-family:'IBM Plex Mono',monospace;
     font-size:16px;
@@ -442,20 +394,9 @@
     text-align:right;
     font-variant-numeric:tabular-nums;
   }
-  .item-del{
-    background:transparent;
-    border:none;
-    color:var(--muted);
-    font-size:16px;
-    padding:4px 6px;
-  }
+  .item-del{background:transparent;border:none;color:var(--muted);font-size:16px;padding:4px 6px;}
   .item-del:active{color:var(--danger);}
-  .empty-state{
-    color:var(--muted);
-    font-size:12px;
-    text-align:center;
-    padding:24px 0;
-  }
+  .empty-state{color:var(--muted);font-size:12px;text-align:center;padding:24px 0;}
 
   /* Footer */
   .footer{
@@ -467,13 +408,7 @@
     background:var(--bg);
     border-top:1px solid var(--line);
   }
-  .btn-export{
-    flex:2;
-    background:var(--amber);
-    color:#241A02;
-    padding:13px;
-    font-size:14px;
-  }
+  .btn-export{flex:2;background:var(--amber);color:#241A02;padding:13px;font-size:14px;}
   .btn-clear{
     flex:1;
     background:transparent;
@@ -520,14 +455,15 @@
       <button class="btn-torch" id="torchBtn" title="Light">&#9728;</button>
     </div>
     <div class="cam-status" id="camStatus"></div>
+    <div class="readout" id="readout"></div>
 
     <div class="fmt-label">Barcode type on your labels</div>
     <div class="fmt-row" id="fmtRow">
-      <button class="fmt-chip active" data-fmt="retail">EAN / UPC</button>
+      <button class="fmt-chip active" data-fmt="auto">ALL</button>
+      <button class="fmt-chip" data-fmt="retail">EAN / UPC</button>
       <button class="fmt-chip" data-fmt="code128">CODE 128</button>
       <button class="fmt-chip" data-fmt="code39">CODE 39</button>
       <button class="fmt-chip" data-fmt="itf">ITF</button>
-      <button class="fmt-chip" data-fmt="auto">ALL</button>
     </div>
 
     <div class="manual-label">Or enter barcode manually</div>
@@ -555,7 +491,6 @@
   <div class="save-note">Progress auto-saves to this browser</div>
 </div>
 
-<!-- Confirm quantity overlay -->
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-card">
     <div class="confirm-barcode-label">Stock code</div>
@@ -577,7 +512,7 @@
 <script>
 (function(){
   const STORAGE_KEY = 'counts';
-  let counts = {}; // { barcode: { qty, ts } }
+  let counts = {};
   let scanning = false;
   let awaitingConfirm = false;
   let currentBarcode = null;
@@ -589,6 +524,7 @@
   const stopBtn = el('stopBtn');
   const torchBtn = el('torchBtn');
   const camStatus = el('camStatus');
+  const readout = el('readout');
   const countBadge = el('countBadge');
   const lockFill = el('lockFill');
   const fmtRow = el('fmtRow');
@@ -612,23 +548,23 @@
   const clearBtn = el('clearBtn');
 
   // ---------- symbology sets ----------
-  // Running every reader at once is the main cause of wrong reads:
-  // a partial CODE 128 pattern can be "decoded" as a valid-looking EAN and vice versa.
   const FORMAT_SETS = {
-    retail:  { native:['ean_13','ean_8','upc_a','upc_e'],                          quagga:['ean_reader','ean_8_reader'] },
-    code128: { native:['code_128'],                                                quagga:['code_128_reader'] },
-    code39:  { native:['code_39'],                                                 quagga:['code_39_reader'] },
-    itf:     { native:['itf'],                                                     quagga:['i2of5_reader'] },
-    auto:    { native:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'],quagga:['ean_reader','ean_8_reader','code_128_reader','code_39_reader'] }
+    auto:    { native:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','codabar'],
+               quagga:['ean_reader','ean_8_reader','code_128_reader','code_39_reader'] },
+    retail:  { native:['ean_13','ean_8','upc_a','upc_e'],
+               quagga:['ean_reader','ean_8_reader'] },
+    code128: { native:['code_128'],  quagga:['code_128_reader'] },
+    code39:  { native:['code_39'],   quagga:['code_39_reader'] },
+    itf:     { native:['itf'],       quagga:['i2of5_reader'] }
   };
-  let currentFmt = 'retail';
+  let currentFmt = 'auto';
 
   fmtRow.addEventListener('click', (e) => {
     const chip = e.target.closest('.fmt-chip');
     if(!chip) return;
     currentFmt = chip.getAttribute('data-fmt');
     [...fmtRow.querySelectorAll('.fmt-chip')].forEach(c => c.classList.toggle('active', c === chip));
-    if(scanning){ stopScanning(); startScanning(); }
+    if(scanning){ stopScanning(); setTimeout(startScanning, 250); }
   });
 
   // ---------- storage ----------
@@ -647,16 +583,22 @@
       catch(e){ console.error('save failed', e); }
     }, 150);
   }
-
   function refreshCount(){
     countBadge.textContent = Object.keys(counts).length.toLocaleString();
   }
 
   // ---------- validation ----------
-  // Mod-10 check digit — catches most garbage decodes on EAN-8/UPC-A/EAN-13/ITF-14.
+  // Mod-10 is only meaningful for EAN/UPC/ITF-14. Applying it to Code 128 or
+  // Code 39 payloads would silently reject perfectly good reads.
+  const CHECKED_FORMATS = ['ean_13','ean_8','upc_a','upc_e','ean','upc'];
+  function usesChecksum(format){
+    if(!format) return false;
+    const f = String(format).toLowerCase();
+    return CHECKED_FORMATS.some(k => f.indexOf(k) !== -1);
+  }
   function checksumOk(code){
-    if(!/^\d+$/.test(code)) return true;          // non-numeric symbologies: nothing to check
-    if(![8,12,13,14].includes(code.length)) return true;
+    if(!/^\d+$/.test(code)) return true;
+    if([8,12,13].indexOf(code.length) === -1) return true;
     const d = code.split('').map(Number);
     const check = d.pop();
     let sum = 0;
@@ -664,48 +606,79 @@
     return ((10 - (sum % 10)) % 10) === check;
   }
 
-  function plausible(code){
+  function reject(code, why){
+    logRead(code, 0, why);
+    return false;
+  }
+  function plausible(code, format){
     if(!code) return false;
-    if(code.length < 6) return false;             // 1–5 chars is almost always noise
-    if(!checksumOk(code)) return false;
+    if(code.length < 4) return reject(code, 'too short');
+    if(usesChecksum(format) && !checksumOk(code)) return reject(code, 'bad check digit');
     return true;
   }
 
+  // ---------- live readout ----------
+  let seenLog = [];
+  function logRead(code, hits, rejectedWhy){
+    const now = Date.now();
+    seenLog = seenLog.filter(r => now - r.t < 6000);
+    const prev = seenLog.find(r => r.code === code);
+    if(prev){ prev.t = now; prev.hits = hits; prev.why = rejectedWhy; }
+    else { seenLog.unshift({ code, t: now, hits: hits, why: rejectedWhy }); }
+    seenLog = seenLog.slice(0, 4);
+    renderReadout();
+  }
+  function renderReadout(){
+    if(!scanning){ readout.classList.remove('show'); return; }
+    readout.classList.add('show');
+    if(!seenLog.length){
+      readout.innerHTML = 'Decoder running · nothing read yet';
+      return;
+    }
+    readout.innerHTML = seenLog.map(r => {
+      if(r.why) return '<span class="rejected">✕ ' + esc(r.code) + ' — ' + esc(r.why) + '</span>';
+      return '<b>' + esc(r.code) + '</b> · ' + r.hits + '/' + neededReads;
+    }).join('<br>');
+  }
+
   // ---------- consensus voting ----------
-  // A single frame is never trusted. The same value has to come back N times
-  // inside a short window before it is accepted.
   let neededReads = 2;
   let votes = [];
-  const VOTE_WINDOW_MS = 1600;
+  let VOTE_WINDOW_MS = 3000;
 
   function updateLock(hits){
     lockFill.style.width = Math.min(100, (hits / neededReads) * 100) + '%';
   }
 
-  function vote(code){
+  function vote(code, format){
     if(awaitingConfirm || !scanning) return;
-    if(!plausible(code)) return;
+    if(!plausible(code, format)) return;
     const now = Date.now();
     votes = votes.filter(v => now - v.t < VOTE_WINDOW_MS);
     votes.push({ code, t: now });
     const hits = votes.filter(v => v.code === code).length;
     updateLock(hits);
+    logRead(code, hits, null);
     if(hits >= neededReads){
       votes = [];
       updateLock(0);
-      accept(code);
+      accept(code, format);
     }
   }
 
-  function accept(code){
+  function accept(code, format){
     if(navigator.vibrate) navigator.vibrate(60);
     viewfinder.classList.add('flash');
     setTimeout(() => viewfinder.classList.remove('flash'), 350);
-    openConfirm(code, currentSource);
+    openConfirm(code, format);
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   // ---------- engine: native BarcodeDetector ----------
-  let engine = null;          // 'native' | 'quagga'
+  let engine = null;
   let detector = null;
   let mediaStream = null;
   let videoEl = null;
@@ -715,16 +688,12 @@
     if(!('BarcodeDetector' in window) || !navigator.mediaDevices) return false;
     try{
       const supported = await window.BarcodeDetector.getSupportedFormats();
-      const want = FORMAT_SETS[currentFmt].native.filter(f => supported.includes(f));
+      const want = FORMAT_SETS[currentFmt].native.filter(f => supported.indexOf(f) !== -1);
       if(!want.length) return false;
       detector = new window.BarcodeDetector({ formats: want });
 
       mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width:  { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
       });
 
       videoEl = document.createElement('video');
@@ -733,13 +702,14 @@
       videoEl.muted = true;
       videoEl.autoplay = true;
       videoEl.srcObject = mediaStream;
-      viewfinder.appendChild(videoEl);
+      viewfinder.insertBefore(videoEl, viewfinder.firstChild);
       await videoEl.play();
 
-      tuneTrack();
       engine = 'native';
       neededReads = 2;
-      onStarted('Native detector · point at one barcode, hold steady');
+      VOTE_WINDOW_MS = 3000;
+      tuneTrack();
+      onStarted('Native decoder · hold steady over one barcode');
       nativeLoop();
       return true;
     }catch(e){
@@ -750,22 +720,18 @@
   }
 
   function nativeLoop(){
-    if(!scanning || engine !== 'native') return;
     const step = async () => {
       if(!scanning || engine !== 'native') return;
       if(!awaitingConfirm && videoEl && videoEl.readyState >= 2){
         try{
           const found = await detector.detect(videoEl);
-          if(found.length === 1){
-            currentSource = found[0].format;
-            vote(String(found[0].rawValue).trim());
-          }else if(found.length > 1){
-            // more than one barcode in frame — ambiguous, skip the frame
-            camStatus.textContent = 'Multiple barcodes in view — isolate one';
+          if(found.length){
+            const best = found[0];
+            vote(String(best.rawValue).trim(), best.format);
           }
-        }catch(e){ /* transient decode error, ignore */ }
+        }catch(e){ /* transient decode error */ }
       }
-      loopTimer = setTimeout(step, 80);
+      loopTimer = setTimeout(step, 70);
     };
     step();
   }
@@ -788,14 +754,9 @@
       inputStream: {
         type: 'LiveStream',
         target: viewfinder,
-        constraints: {
-          facingMode: 'environment',
-          width:  { min: 640,  ideal: 1280 },
-          height: { min: 480,  ideal: 720 }
-        },
-        area: { top: '25%', right: '5%', left: '5%', bottom: '25%' }  // decode only the centre band
+        constraints: { facingMode: 'environment', width: 1280, height: 720 }
       },
-      locator: { patchSize: 'medium', halfSample: false },
+      locator: { patchSize: 'medium', halfSample: true },
       decoder: { readers: FORMAT_SETS[currentFmt].quagga.slice() },
       locate: true,
       numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2,
@@ -803,14 +764,16 @@
     }, function(err){
       if(err){
         console.error(err);
+        scanning = false;
         camStatus.textContent = 'Camera unavailable here — this can happen inside an embedded preview. Open the file directly in your phone\'s browser, or use manual entry below.';
         camStatus.classList.add('err');
         return;
       }
       Quagga.start();
       engine = 'quagga';
-      neededReads = 4;   // Quagga is far noisier, so demand more agreement
-      onStarted('Fallback decoder · hold steady, fill the frame width');
+      neededReads = 3;
+      VOTE_WINDOW_MS = 4000;
+      onStarted('Fallback decoder · fill the frame width with the barcode');
       tuneTrack();
       const vc = viewfinder.querySelector('video');
       if(vc){ vc.style.position='absolute'; vc.style.top=0; vc.style.left=0; vc.style.width='100%'; vc.style.height='100%'; vc.style.objectFit='cover'; }
@@ -826,17 +789,13 @@
     const rc = result && result.codeResult;
     if(!rc || !rc.code) return;
 
-    // Quagga reports a per-character decode error. Loose thresholds are exactly
-    // why it "guesses" digits — anything sloppy gets thrown away here.
     const decoded = (rc.decodedCodes || []).filter(c => typeof c.error === 'number');
     if(decoded.length){
-      const errs = decoded.map(c => c.error);
-      const avg = errs.reduce((a,b) => a+b, 0) / errs.length;
-      const max = Math.max.apply(null, errs);
-      if(avg > 0.08 || max > 0.14) return;
+      const errs = decoded.map(c => c.error).sort((a,b) => a-b);
+      const median = errs[Math.floor(errs.length/2)];
+      if(median > 0.14){ logRead(rc.code, 0, 'low confidence'); return; }
     }
-    currentSource = rc.format || '';
-    vote(String(rc.code).trim());
+    vote(String(rc.code).trim(), rc.format || '');
   }
 
   // ---------- start / stop ----------
@@ -845,10 +804,11 @@
     camStatus.classList.remove('err');
     camStatus.textContent = 'Requesting camera…';
     votes = [];
+    seenLog = [];
     updateLock(0);
     scanning = true;
     const ok = await tryNative();
-    if(!ok){ startQuagga(); }
+    if(!ok && scanning){ startQuagga(); }
   }
 
   function onStarted(msg){
@@ -857,6 +817,7 @@
     startBtn.style.display = 'none';
     stopBtn.style.display = 'block';
     camStatus.textContent = msg;
+    renderReadout();
   }
 
   function stopScanning(){
@@ -867,10 +828,12 @@
     cleanupNative();
     engine = null;
     votes = [];
+    seenLog = [];
     updateLock(0);
     torchOn = false;
     torchBtn.classList.remove('on');
     torchBtn.style.display = 'none';
+    readout.classList.remove('show');
     viewfinder.classList.add('idle');
     viewfinder.classList.remove('scanning');
     startBtn.style.display = 'block';
@@ -878,9 +841,9 @@
     camStatus.textContent = '';
   }
 
-  // ---------- camera track tuning (focus + torch) ----------
+  // ---------- camera track tuning ----------
   function activeTrack(){
-    if(engine === 'native' && mediaStream) return mediaStream.getVideoTracks()[0] || null;
+    if(mediaStream) return mediaStream.getVideoTracks()[0] || null;
     try{ return Quagga.CameraAccess.getActiveTrack(); }catch(e){ return null; }
   }
 
@@ -890,12 +853,11 @@
       if(!track || !track.getCapabilities) return;
       let caps = {};
       try{ caps = track.getCapabilities() || {}; }catch(e){ return; }
-      const advanced = [];
-      if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1) advanced.push({ focusMode: 'continuous' });
-      if(caps.zoom && caps.zoom.min <= 1.6 && caps.zoom.max >= 1.6) advanced.push({ zoom: 1.6 });
-      if(advanced.length){ track.applyConstraints({ advanced: advanced }).catch(()=>{}); }
+      if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1){
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(()=>{});
+      }
       torchBtn.style.display = caps.torch ? 'block' : 'none';
-    }, 400);
+    }, 500);
   }
 
   let torchOn = false;
@@ -912,8 +874,9 @@
   function openConfirm(barcode, source){
     awaitingConfirm = true;
     currentBarcode = barcode;
+    currentSource = source || '';
     confirmBarcode.textContent = barcode;
-    confirmMeta.textContent = source ? (String(source).replace(/_/g,'-') + ' · ' + barcode.length + ' chars') : (barcode.length + ' chars');
+    confirmMeta.textContent = (source ? String(source).replace(/_/g,'-') + ' · ' : '') + barcode.length + ' chars';
     const existing = counts[barcode];
     if(existing){
       confirmHint.textContent = 'Already counted — last entered: ' + existing.qty + '. Saving will overwrite it.';
@@ -931,7 +894,9 @@
     awaitingConfirm = false;
     currentBarcode = null;
     votes = [];
+    seenLog = [];
     updateLock(0);
+    renderReadout();
   }
 
   function saveCurrent(){
@@ -958,7 +923,6 @@
     const v = manualInput.value.trim();
     if(!v) return;
     manualInput.value = '';
-    currentSource = 'manual';
     openConfirm(v, 'manual');
   });
   manualInput.addEventListener('keydown', (e) => {
@@ -977,7 +941,7 @@
     const entries = Object.entries(counts)
       .filter(([code]) => !filter || code.toLowerCase().includes(filter))
       .sort((a,b) => (b[1].ts||0) - (a[1].ts||0))
-      .slice(0, 200); // cap render for performance; use search to find older ones
+      .slice(0, 200);
 
     if(entries.length === 0){
       listContainer.innerHTML = '<div class="empty-state">No items counted yet.</div>';
@@ -985,21 +949,17 @@
     }
     listContainer.innerHTML = entries.map(([code, data]) => {
       const time = data.ts ? new Date(data.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
-      return `<div class="item-row" data-code="${escapeHtml(code)}">
+      return `<div class="item-row" data-code="${esc(code)}">
         <div>
-          <div class="item-code">${escapeHtml(code)}</div>
+          <div class="item-code">${esc(code)}</div>
           <div class="item-time">${time}</div>
         </div>
         <div class="item-right">
-          <div class="item-qty">${escapeHtml(String(data.qty))}</div>
-          <button class="item-del" data-del="${escapeHtml(code)}">&#10005;</button>
+          <div class="item-qty">${esc(String(data.qty))}</div>
+          <button class="item-del" data-del="${esc(code)}">&#10005;</button>
         </div>
       </div>`;
     }).join('');
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   listContainer.addEventListener('click', (e) => {
@@ -1013,9 +973,7 @@
       return;
     }
     const row = e.target.closest('.item-row');
-    if(row){
-      openConfirm(row.getAttribute('data-code'), 'edit');
-    }
+    if(row){ openConfirm(row.getAttribute('data-code'), 'edit'); }
   });
 
   searchInput.addEventListener('input', renderList);
@@ -1024,8 +982,7 @@
   exportBtn.addEventListener('click', () => {
     const entries = Object.entries(counts);
     if(entries.length === 0){ alert('No items counted yet.'); return; }
-    const lines = entries.map(([code, data]) => `${code},${data.qty}`);
-    const csv = lines.join('\n') + '\n';
+    const csv = entries.map(([code, data]) => `${code},${data.qty}`).join('\n') + '\n';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
