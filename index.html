@@ -155,6 +155,24 @@
     0%{box-shadow: inset 0 0 0 3px var(--led);}
     100%{box-shadow: inset 0 0 0 0px transparent;}
   }
+  /* lock-on meter: fills as the same code is read repeatedly */
+  .lock-wrap{
+    position:absolute;
+    left:6%;right:6%;bottom:14px;
+    height:4px;
+    background:rgba(243,241,231,0.14);
+    border-radius:2px;
+    display:none;
+    overflow:hidden;
+  }
+  .viewfinder.scanning .lock-wrap{display:block;}
+  .lock-fill{
+    height:100%;
+    width:0%;
+    background:var(--led);
+    box-shadow:0 0 8px rgba(74,222,128,0.6);
+    transition:width 0.1s linear;
+  }
 
   .scan-controls{
     display:flex;
@@ -185,20 +203,56 @@
     padding:13px 16px;
     font-size:14px;
   }
+  .btn-torch{
+    width:54px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-size:17px;
+    display:none;
+  }
+  .btn-torch.on{color:var(--amber);border-color:var(--amber);}
   .cam-status{
     margin-top:8px;
     font-size:11px;
     color:var(--muted);
     min-height:14px;
     font-family:'IBM Plex Mono',monospace;
+    line-height:1.45;
   }
   .cam-status.err{color:var(--danger);}
+
+  /* Symbology picker */
+  .fmt-label{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:var(--muted);
+    margin-top:16px;
+  }
+  .fmt-row{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .fmt-chip{
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--muted);
+    padding:7px 12px;
+    border-radius:20px;
+    font-size:11px;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:0.06em;
+  }
+  .fmt-chip.active{border-color:var(--led);color:var(--led);}
 
   /* Manual entry */
   .manual-row{
     display:flex;
     gap:8px;
-    margin-top:14px;
+    margin-top:8px;
   }
   .manual-row input{
     flex:1;
@@ -223,7 +277,7 @@
     text-transform:uppercase;
     letter-spacing:0.1em;
     color:var(--muted);
-    margin-top:14px;
+    margin-top:16px;
   }
 
   /* Confirm panel (modal-ish, inline) */
@@ -258,6 +312,14 @@
     letter-spacing:0.04em;
     margin:4px 0 4px;
     word-break:break-all;
+  }
+  .confirm-meta{
+    font-size:10px;
+    font-family:'IBM Plex Mono',monospace;
+    color:var(--muted);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:6px;
   }
   .confirm-hint{
     font-size:12px;
@@ -450,12 +512,23 @@
         <span class="fc-bl"></span><span class="fc-br"></span>
       </div>
       <div class="laser-line" id="laserLine"></div>
+      <div class="lock-wrap"><div class="lock-fill" id="lockFill"></div></div>
     </div>
     <div class="scan-controls">
       <button class="btn-primary" id="startBtn">Start Scanning</button>
       <button class="btn-stop" id="stopBtn" style="display:none;">Stop</button>
+      <button class="btn-torch" id="torchBtn" title="Light">&#9728;</button>
     </div>
     <div class="cam-status" id="camStatus"></div>
+
+    <div class="fmt-label">Barcode type on your labels</div>
+    <div class="fmt-row" id="fmtRow">
+      <button class="fmt-chip active" data-fmt="retail">EAN / UPC</button>
+      <button class="fmt-chip" data-fmt="code128">CODE 128</button>
+      <button class="fmt-chip" data-fmt="code39">CODE 39</button>
+      <button class="fmt-chip" data-fmt="itf">ITF</button>
+      <button class="fmt-chip" data-fmt="auto">ALL</button>
+    </div>
 
     <div class="manual-label">Or enter barcode manually</div>
     <div class="manual-row">
@@ -487,6 +560,7 @@
   <div class="confirm-card">
     <div class="confirm-barcode-label">Stock code</div>
     <div class="confirm-barcode mono" id="confirmBarcode">—</div>
+    <div class="confirm-meta" id="confirmMeta"></div>
     <div class="confirm-hint" id="confirmHint"></div>
     <div class="qty-row">
       <button class="qty-step" id="qtyMinus">&minus;</button>
@@ -507,17 +581,22 @@
   let scanning = false;
   let awaitingConfirm = false;
   let currentBarcode = null;
+  let currentSource = '';
 
   const el = (id) => document.getElementById(id);
   const viewfinder = el('viewfinder');
   const startBtn = el('startBtn');
   const stopBtn = el('stopBtn');
+  const torchBtn = el('torchBtn');
   const camStatus = el('camStatus');
   const countBadge = el('countBadge');
+  const lockFill = el('lockFill');
+  const fmtRow = el('fmtRow');
   const manualInput = el('manualInput');
   const manualBtn = el('manualBtn');
   const confirmOverlay = el('confirmOverlay');
   const confirmBarcode = el('confirmBarcode');
+  const confirmMeta = el('confirmMeta');
   const confirmHint = el('confirmHint');
   const qtyInput = el('qtyInput');
   const qtySave = el('qtySave');
@@ -531,6 +610,26 @@
   const searchInput = el('searchInput');
   const exportBtn = el('exportBtn');
   const clearBtn = el('clearBtn');
+
+  // ---------- symbology sets ----------
+  // Running every reader at once is the main cause of wrong reads:
+  // a partial CODE 128 pattern can be "decoded" as a valid-looking EAN and vice versa.
+  const FORMAT_SETS = {
+    retail:  { native:['ean_13','ean_8','upc_a','upc_e'],                          quagga:['ean_reader','ean_8_reader'] },
+    code128: { native:['code_128'],                                                quagga:['code_128_reader'] },
+    code39:  { native:['code_39'],                                                 quagga:['code_39_reader'] },
+    itf:     { native:['itf'],                                                     quagga:['i2of5_reader'] },
+    auto:    { native:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'],quagga:['ean_reader','ean_8_reader','code_128_reader','code_39_reader'] }
+  };
+  let currentFmt = 'retail';
+
+  fmtRow.addEventListener('click', (e) => {
+    const chip = e.target.closest('.fmt-chip');
+    if(!chip) return;
+    currentFmt = chip.getAttribute('data-fmt');
+    [...fmtRow.querySelectorAll('.fmt-chip')].forEach(c => c.classList.toggle('active', c === chip));
+    if(scanning){ stopScanning(); startScanning(); }
+  });
 
   // ---------- storage ----------
   async function loadState(){
@@ -553,49 +652,225 @@
     countBadge.textContent = Object.keys(counts).length.toLocaleString();
   }
 
-  // ---------- camera scanning (Quagga) ----------
-  function startScanning(){
-    camStatus.textContent = 'Requesting camera…';
-    camStatus.classList.remove('err');
+  // ---------- validation ----------
+  // Mod-10 check digit — catches most garbage decodes on EAN-8/UPC-A/EAN-13/ITF-14.
+  function checksumOk(code){
+    if(!/^\d+$/.test(code)) return true;          // non-numeric symbologies: nothing to check
+    if(![8,12,13,14].includes(code.length)) return true;
+    const d = code.split('').map(Number);
+    const check = d.pop();
+    let sum = 0;
+    d.reverse().forEach((n,i) => { sum += n * (i % 2 === 0 ? 3 : 1); });
+    return ((10 - (sum % 10)) % 10) === check;
+  }
+
+  function plausible(code){
+    if(!code) return false;
+    if(code.length < 6) return false;             // 1–5 chars is almost always noise
+    if(!checksumOk(code)) return false;
+    return true;
+  }
+
+  // ---------- consensus voting ----------
+  // A single frame is never trusted. The same value has to come back N times
+  // inside a short window before it is accepted.
+  let neededReads = 2;
+  let votes = [];
+  const VOTE_WINDOW_MS = 1600;
+
+  function updateLock(hits){
+    lockFill.style.width = Math.min(100, (hits / neededReads) * 100) + '%';
+  }
+
+  function vote(code){
+    if(awaitingConfirm || !scanning) return;
+    if(!plausible(code)) return;
+    const now = Date.now();
+    votes = votes.filter(v => now - v.t < VOTE_WINDOW_MS);
+    votes.push({ code, t: now });
+    const hits = votes.filter(v => v.code === code).length;
+    updateLock(hits);
+    if(hits >= neededReads){
+      votes = [];
+      updateLock(0);
+      accept(code);
+    }
+  }
+
+  function accept(code){
+    if(navigator.vibrate) navigator.vibrate(60);
+    viewfinder.classList.add('flash');
+    setTimeout(() => viewfinder.classList.remove('flash'), 350);
+    openConfirm(code, currentSource);
+  }
+
+  // ---------- engine: native BarcodeDetector ----------
+  let engine = null;          // 'native' | 'quagga'
+  let detector = null;
+  let mediaStream = null;
+  let videoEl = null;
+  let loopTimer = null;
+
+  async function tryNative(){
+    if(!('BarcodeDetector' in window) || !navigator.mediaDevices) return false;
+    try{
+      const supported = await window.BarcodeDetector.getSupportedFormats();
+      const want = FORMAT_SETS[currentFmt].native.filter(f => supported.includes(f));
+      if(!want.length) return false;
+      detector = new window.BarcodeDetector({ formats: want });
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+
+      videoEl = document.createElement('video');
+      videoEl.setAttribute('playsinline','');
+      videoEl.playsInline = true;
+      videoEl.muted = true;
+      videoEl.autoplay = true;
+      videoEl.srcObject = mediaStream;
+      viewfinder.appendChild(videoEl);
+      await videoEl.play();
+
+      tuneTrack();
+      engine = 'native';
+      neededReads = 2;
+      onStarted('Native detector · point at one barcode, hold steady');
+      nativeLoop();
+      return true;
+    }catch(e){
+      console.error('native scanner failed', e);
+      cleanupNative();
+      return false;
+    }
+  }
+
+  function nativeLoop(){
+    if(!scanning || engine !== 'native') return;
+    const step = async () => {
+      if(!scanning || engine !== 'native') return;
+      if(!awaitingConfirm && videoEl && videoEl.readyState >= 2){
+        try{
+          const found = await detector.detect(videoEl);
+          if(found.length === 1){
+            currentSource = found[0].format;
+            vote(String(found[0].rawValue).trim());
+          }else if(found.length > 1){
+            // more than one barcode in frame — ambiguous, skip the frame
+            camStatus.textContent = 'Multiple barcodes in view — isolate one';
+          }
+        }catch(e){ /* transient decode error, ignore */ }
+      }
+      loopTimer = setTimeout(step, 80);
+    };
+    step();
+  }
+
+  function cleanupNative(){
+    clearTimeout(loopTimer);
+    loopTimer = null;
+    if(mediaStream){
+      mediaStream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} });
+      mediaStream = null;
+    }
+    if(videoEl && videoEl.parentNode){ videoEl.parentNode.removeChild(videoEl); }
+    videoEl = null;
+    detector = null;
+  }
+
+  // ---------- engine: Quagga fallback ----------
+  function startQuagga(){
     Quagga.init({
       inputStream: {
         type: 'LiveStream',
         target: viewfinder,
-        constraints: { facingMode: 'environment', width: 640, height: 480 }
+        constraints: {
+          facingMode: 'environment',
+          width:  { min: 640,  ideal: 1280 },
+          height: { min: 480,  ideal: 720 }
+        },
+        area: { top: '25%', right: '5%', left: '5%', bottom: '25%' }  // decode only the centre band
       },
-      decoder: {
-        readers: ['upc_reader','upc_e_reader','ean_reader','ean_8_reader','code_128_reader']
-      },
+      locator: { patchSize: 'medium', halfSample: false },
+      decoder: { readers: FORMAT_SETS[currentFmt].quagga.slice() },
       locate: true,
       numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2,
-      frequency: 8
+      frequency: 10
     }, function(err){
       if(err){
         console.error(err);
-        camStatus.textContent = 'Camera unavailable here — this can happen inside an embedded preview. Try opening this file directly in your phone\'s browser, or use manual entry below.';
+        camStatus.textContent = 'Camera unavailable here — this can happen inside an embedded preview. Open the file directly in your phone\'s browser, or use manual entry below.';
         camStatus.classList.add('err');
         return;
       }
       Quagga.start();
-      scanning = true;
-      viewfinder.classList.remove('idle');
-      viewfinder.classList.add('scanning');
-      startBtn.style.display = 'none';
-      stopBtn.style.display = 'block';
-      camStatus.textContent = 'Scanning… point camera at a barcode';
-      // Quagga injects its own <video>/<canvas> into target; make sure it fills the frame
+      engine = 'quagga';
+      neededReads = 4;   // Quagga is far noisier, so demand more agreement
+      onStarted('Fallback decoder · hold steady, fill the frame width');
+      tuneTrack();
       const vc = viewfinder.querySelector('video');
       if(vc){ vc.style.position='absolute'; vc.style.top=0; vc.style.left=0; vc.style.width='100%'; vc.style.height='100%'; vc.style.objectFit='cover'; }
       const cv = viewfinder.querySelector('canvas.drawingBuffer');
       if(cv){ cv.style.display='none'; }
     });
 
-    Quagga.onDetected(handleDetected);
+    Quagga.onDetected(handleQuagga);
+  }
+
+  function handleQuagga(result){
+    if(awaitingConfirm || !scanning) return;
+    const rc = result && result.codeResult;
+    if(!rc || !rc.code) return;
+
+    // Quagga reports a per-character decode error. Loose thresholds are exactly
+    // why it "guesses" digits — anything sloppy gets thrown away here.
+    const decoded = (rc.decodedCodes || []).filter(c => typeof c.error === 'number');
+    if(decoded.length){
+      const errs = decoded.map(c => c.error);
+      const avg = errs.reduce((a,b) => a+b, 0) / errs.length;
+      const max = Math.max.apply(null, errs);
+      if(avg > 0.08 || max > 0.14) return;
+    }
+    currentSource = rc.format || '';
+    vote(String(rc.code).trim());
+  }
+
+  // ---------- start / stop ----------
+  async function startScanning(){
+    if(scanning) return;
+    camStatus.classList.remove('err');
+    camStatus.textContent = 'Requesting camera…';
+    votes = [];
+    updateLock(0);
+    scanning = true;
+    const ok = await tryNative();
+    if(!ok){ startQuagga(); }
+  }
+
+  function onStarted(msg){
+    viewfinder.classList.remove('idle');
+    viewfinder.classList.add('scanning');
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'block';
+    camStatus.textContent = msg;
   }
 
   function stopScanning(){
-    try{ Quagga.offDetected(handleDetected); Quagga.stop(); }catch(e){}
     scanning = false;
+    if(engine === 'quagga'){
+      try{ Quagga.offDetected(handleQuagga); Quagga.stop(); }catch(e){}
+    }
+    cleanupNative();
+    engine = null;
+    votes = [];
+    updateLock(0);
+    torchOn = false;
+    torchBtn.classList.remove('on');
+    torchBtn.style.display = 'none';
     viewfinder.classList.add('idle');
     viewfinder.classList.remove('scanning');
     startBtn.style.display = 'block';
@@ -603,21 +878,42 @@
     camStatus.textContent = '';
   }
 
-  function handleDetected(result){
-    if(awaitingConfirm) return;
-    const code = result && result.codeResult && result.codeResult.code;
-    if(!code) return;
-    if(navigator.vibrate) navigator.vibrate(60);
-    viewfinder.classList.add('flash');
-    setTimeout(()=>viewfinder.classList.remove('flash'), 350);
-    openConfirm(code.trim());
+  // ---------- camera track tuning (focus + torch) ----------
+  function activeTrack(){
+    if(engine === 'native' && mediaStream) return mediaStream.getVideoTracks()[0] || null;
+    try{ return Quagga.CameraAccess.getActiveTrack(); }catch(e){ return null; }
   }
 
+  function tuneTrack(){
+    setTimeout(() => {
+      const track = activeTrack();
+      if(!track || !track.getCapabilities) return;
+      let caps = {};
+      try{ caps = track.getCapabilities() || {}; }catch(e){ return; }
+      const advanced = [];
+      if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1) advanced.push({ focusMode: 'continuous' });
+      if(caps.zoom && caps.zoom.min <= 1.6 && caps.zoom.max >= 1.6) advanced.push({ zoom: 1.6 });
+      if(advanced.length){ track.applyConstraints({ advanced: advanced }).catch(()=>{}); }
+      torchBtn.style.display = caps.torch ? 'block' : 'none';
+    }, 400);
+  }
+
+  let torchOn = false;
+  torchBtn.addEventListener('click', () => {
+    const track = activeTrack();
+    if(!track) return;
+    torchOn = !torchOn;
+    track.applyConstraints({ advanced: [{ torch: torchOn }] })
+      .then(() => torchBtn.classList.toggle('on', torchOn))
+      .catch(() => { torchOn = false; torchBtn.classList.remove('on'); });
+  });
+
   // ---------- confirm panel ----------
-  function openConfirm(barcode){
+  function openConfirm(barcode, source){
     awaitingConfirm = true;
     currentBarcode = barcode;
     confirmBarcode.textContent = barcode;
+    confirmMeta.textContent = source ? (String(source).replace(/_/g,'-') + ' · ' + barcode.length + ' chars') : (barcode.length + ' chars');
     const existing = counts[barcode];
     if(existing){
       confirmHint.textContent = 'Already counted — last entered: ' + existing.qty + '. Saving will overwrite it.';
@@ -634,6 +930,8 @@
     confirmOverlay.classList.remove('open');
     awaitingConfirm = false;
     currentBarcode = null;
+    votes = [];
+    updateLock(0);
   }
 
   function saveCurrent(){
@@ -660,7 +958,8 @@
     const v = manualInput.value.trim();
     if(!v) return;
     manualInput.value = '';
-    openConfirm(v);
+    currentSource = 'manual';
+    openConfirm(v, 'manual');
   });
   manualInput.addEventListener('keydown', (e) => {
     if(e.key === 'Enter'){ e.preventDefault(); manualBtn.click(); }
@@ -715,7 +1014,7 @@
     }
     const row = e.target.closest('.item-row');
     if(row){
-      openConfirm(row.getAttribute('data-code'));
+      openConfirm(row.getAttribute('data-code'), 'edit');
     }
   });
 
