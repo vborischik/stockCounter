@@ -568,20 +568,46 @@
   });
 
   // ---------- storage ----------
-  async function loadState(){
-    try{
-      const res = await window.storage.get(STORAGE_KEY, false);
-      if(res && res.value){ counts = JSON.parse(res.value); }
-    }catch(e){ counts = {}; }
-    refreshCount();
+  // Saves go to localStorage synchronously, so nothing is pending if Safari
+  // reloads or discards the tab right after a save.
+  const LS_KEY = 'stockcounter.counts';
+
+  function lsGet(){
+    try{ return localStorage.getItem(LS_KEY); }catch(e){ return null; }
   }
-  let saveTimer = null;
+  function lsSet(value){
+    try{ localStorage.setItem(LS_KEY, value); return true; }
+    catch(e){ console.error('localStorage save failed', e); return false; }
+  }
+
+  async function loadState(){
+    let raw = lsGet();
+    // Fallback for the Claude artifact viewer, where window.storage exists.
+    if(!raw && window.storage && window.storage.get){
+      try{
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if(res && res.value){ raw = res.value; }
+      }catch(e){}
+    }
+    try{ counts = raw ? (JSON.parse(raw) || {}) : {}; }catch(e){ counts = {}; }
+    refreshCount();
+    if(historyBody.classList.contains('open')) renderList();
+  }
+
   function saveState(){
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      try{ await window.storage.set(STORAGE_KEY, JSON.stringify(counts), false); }
-      catch(e){ console.error('save failed', e); }
-    }, 150);
+    const json = JSON.stringify(counts);
+    const ok = lsSet(json);
+    if(window.storage && window.storage.set){
+      window.storage.set(STORAGE_KEY, json, false).catch(()=>{});
+    }else if(!ok){
+      camStatus.textContent = 'Warning: could not save to this browser (Private Browsing?). Export CSV often.';
+      camStatus.classList.add('err');
+    }
+  }
+
+  // Ask the browser not to evict this site's storage.
+  if(navigator.storage && navigator.storage.persist){
+    navigator.storage.persist().catch(()=>{});
   }
   function refreshCount(){
     countBadge.textContent = Object.keys(counts).length.toLocaleString();
