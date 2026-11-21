@@ -349,8 +349,6 @@
   .list-more{margin-top:8px;width:100%;}
   .item-row>div:first-child{min-width:0;overflow-wrap:break-word;}
   [hidden]{display:none!important;}
-  .qty-label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;}
-  .case-input{width:100%;margin-bottom:8px;}
   .qty-row{display:flex;align-items:stretch;gap:8px;margin-bottom:16px;}
   .qty-step{
     width:52px;
@@ -399,7 +397,6 @@
   .chevron.open{transform:rotate(180deg);}
   .history-body{display:none;margin-top:12px;}
   .history-body.open{display:block;}
-  .count-search summary{cursor:pointer;color:var(--muted);font-size:12px;margin:0 0 8px;}
   .search-input{
     width:100%;
     background:var(--panel);
@@ -541,10 +538,7 @@
       <div class="chevron" id="chevron">&#9660;</div>
     </div>
     <div class="history-body" id="historyBody">
-      <details class="count-search" id="countSearch">
-        <summary>Search counted items</summary>
-        <input type="text" class="search-input" id="searchInput" aria-label="Search counted items" placeholder="Filter by stock code&hellip;">
-      </details>
+      <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
       <div id="listContainer"></div>
       <button type="button" id="listMore" class="list-more" hidden>Show more</button>
     </div>
@@ -566,11 +560,6 @@
     <div class="confirm-meta" id="confirmMeta"></div>
     <div class="qty-summary" id="confirmSummary" hidden></div>
     <div class="confirm-hint" id="confirmHint"></div>
-    <div id="caseEntry" hidden>
-      <label class="qty-label" id="caseLabel" for="caseInput">Cases</label>
-      <input type="number" class="qty-input case-input" id="caseInput" inputmode="numeric" min="0" step="1" placeholder="0">
-    </div>
-    <label class="qty-label" id="qtyLabel" for="qtyInput">Units</label>
     <div class="qty-row">
       <button class="qty-step" id="qtyMinus">&minus;</button>
       <input type="number" class="qty-input" id="qtyInput" inputmode="numeric" step="1" placeholder="0">
@@ -628,7 +617,6 @@
   const qtyAdd = el('qtyAdd');
   const qtyRemove = el('qtyRemove');
   const qtyInput = el('qtyInput');
-  const caseInput = el('caseInput');
   const qtySave = el('qtySave');
   const qtyCancel = el('qtyCancel');
   const qtyMinus = el('qtyMinus');
@@ -754,7 +742,6 @@
       return readStockReport(header, rows);
     }
     const idColumn = header.indexOf('ID');
-    const caseColumn = header.indexOf('Unit Per Case');
     const ids = new Set();
     const columns = inventoryColumns.map(name => header.indexOf(name));
     if(columns.includes(-1)) throw new Error('Select a BottlePOS inventory CSV with the required stock and quantity columns.');
@@ -769,9 +756,7 @@
       const id = (row[idColumn] || '').trim();
       if(id && ids.has(id)) throw new Error('Duplicate BottlePOS ID in CSV record ' + (index + 2) + '.');
       if(id) ids.add(id);
-      const unitsPerCase = Number(row[caseColumn]);
-      products.set(stockCode, {id, stockCode, upc, name, size, qtyOnHand, systemQty,
-        unitsPerCase: Number.isSafeInteger(unitsPerCase) && unitsPerCase > 0 ? unitsPerCase : null});
+      products.set(stockCode, {id, stockCode, upc, name, size, qtyOnHand, systemQty});
     });
     if(!products.size) throw new Error('No inventory products were found in the CSV.');
     return {importedAt: Date.now(), products: Array.from(products.values()), stockReport};
@@ -1355,13 +1340,6 @@
       confirmMeta.textContent = catalog ? 'Missing from inventory' :
         (source ? String(source).replace(/_/g, '-') + ' · ' : '') + barcode.length + ' chars';
     }
-    const unitsPerCase = product && product.unitsPerCase;
-    el('caseEntry').hidden = !(unitsPerCase > 1);
-    el('caseLabel').textContent = 'Cases (' + unitsPerCase + ' units per case)';
-    el('qtyLabel').textContent = unitsPerCase > 1 ? 'Loose units' : 'Units';
-    if(unitsPerCase === 1){
-      confirmSummary.innerHTML += statistic('Units per case', unitsPerCase);
-    }
     setCountMode(Boolean(existing));
     confirmOverlay.classList.add('open');
     setTimeout(() => { if(awaitingConfirm) qtyInput.focus(); }, 50);
@@ -1371,14 +1349,7 @@
   function setCountMode(add){
     addingCount = add;
     const existing = counts[currentBarcode];
-    caseInput.value = '';
     qtyInput.value = !add && existing ? existing.qty : '';
-    const product = catalog && catalog.products.get(currentBarcode);
-    const total = Number(qtyInput.value);
-    if(product && product.unitsPerCase > 1 && qtyInput.value !== '' && Number.isSafeInteger(total) && total >= 0){
-      caseInput.value = String(Math.floor(total / product.unitsPerCase));
-      qtyInput.value = String(total % product.unitsPerCase);
-    }
     qtySave.textContent = add ? 'Add to Count' : existing ? 'Update Count' : 'Save Count';
     qtyAdd.textContent = add ? 'Update Count' : 'Add to Count';
     qtyAdd.hidden = !existing;
@@ -1399,17 +1370,7 @@
 
   function saveCurrent(){
     if(!currentBarcode) return;
-    const loose = qtyInput.value.trim();
-    const product = catalog && catalog.products.get(currentBarcode);
-    const cases = product && product.unitsPerCase > 1 ? caseInput.value.trim() : '';
-    if(!el('caseEntry').hidden && ((caseInput.validity && caseInput.validity.badInput) ||
-      (cases && (!Number.isSafeInteger(Number(cases)) || Number(cases) < 0)))){
-      confirmHint.textContent = 'Enter a whole number of cases, 0 or more.';
-      caseInput.focus();
-      return;
-    }
-    if(!loose && !cases){ qtyInput.focus(); return; }
-    const val = cases ? String(Number(cases) * product.unitsPerCase + Number(loose)) : loose;
+    const val = qtyInput.value.trim();
     const existing = counts[currentBarcode];
     const previous = existing ? Number(existing.qty) : 0;
     const qty = addingCount ? Number((previous + Number(val)).toFixed(8)) : val;
@@ -1440,9 +1401,7 @@
   });
   qtySave.addEventListener('click', saveCurrent);
   qtyCancel.addEventListener('click', closeConfirm);
-  [qtyInput, caseInput].forEach(input => {
-    input.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrent(); } });
-  });
+  qtyInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrent(); } });
   qtyMinus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') - 1).toString(); });
   qtyPlus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') + 1).toString(); });
 
@@ -1546,12 +1505,6 @@
     renderList();
   }
   searchInput.addEventListener('input', resetList);
-  el('countSearch').addEventListener('toggle', (event) => {
-    if(!event.currentTarget.open && searchInput.value){
-      searchInput.value = '';
-      resetList();
-    }
-  });
   listMore.addEventListener('click', () => { listLimit += 200; renderList(); });
 
   // ---------- exports ----------
