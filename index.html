@@ -345,6 +345,7 @@
   .inventory-status{font-size:12px;color:var(--muted);margin-top:6px;}
   .inventory-filter{width:100%;margin-bottom:10px;}
   .btn-add-count{margin-top:8px;width:100%;}
+  .btn-remove-count{color:var(--danger);}
   .list-more{margin-top:8px;width:100%;}
   .item-row>div:first-child{min-width:0;overflow-wrap:break-word;}
   [hidden]{display:none!important;}
@@ -570,6 +571,7 @@
       <button class="btn-save" id="qtySave">Save &amp; Continue</button>
     </div>
     <button type="button" class="btn-add-count" id="qtyAdd">Add to Count</button>
+    <button type="button" class="btn-add-count btn-remove-count" id="qtyRemove" hidden>Remove Count</button>
   </div>
 </div>
 
@@ -578,6 +580,7 @@
   const STORAGE_KEY = 'counts';
   let counts = Object.create(null);
   let catalog = null;
+  let stockReport = null;
   let loadingCatalog = true;
   let listLimit = 200;
   let scanning = false;
@@ -613,6 +616,7 @@
   const confirmProduct = el('confirmProduct');
   const confirmSummary = el('confirmSummary');
   const qtyAdd = el('qtyAdd');
+  const qtyRemove = el('qtyRemove');
   const qtyInput = el('qtyInput');
   const qtySave = el('qtySave');
   const qtyCancel = el('qtyCancel');
@@ -756,13 +760,10 @@
       products.set(stockCode, {id, stockCode, upc, name, size, qtyOnHand, systemQty});
     });
     if(!products.size) throw new Error('No inventory products were found in the CSV.');
-    return {importedAt: Date.now(), products: Array.from(products.values()), stockReport: catalog && catalog.stockReport};
+    return {importedAt: Date.now(), products: Array.from(products.values()), stockReport};
   }
 
   function readStockReport(header, rows){
-    if(!catalog || !Array.from(catalog.products.values()).some(product => product.id)){
-      throw new Error('Import the BottlePOS items CSV with its ID column first.');
-    }
     const columns = ['ID', 'Qty'].map(name => header.indexOf(name));
     const totals = new Map();
     rows.forEach((row, index) => {
@@ -776,7 +777,8 @@
       totals.set(id, total);
     });
     if(!totals.size) throw new Error('No stock report quantities were found.');
-    return {importedAt: catalog.importedAt, products: Array.from(catalog.products.values()),
+    return {importedAt: catalog ? catalog.importedAt : null,
+      products: catalog ? Array.from(catalog.products.values()) : [],
       stockReport: {importedAt: Date.now(), totals: Array.from(totals.entries())}};
 
   }
@@ -807,7 +809,7 @@
     const ids = new Set(record.products.map(product => product.id).filter(Boolean));
     let stockMatches = 0;
     stockTotals.forEach((qty, id) => { if(ids.has(id)) stockMatches++; });
-    return {products, exact, normalized, importedAt: record.importedAt, stockReport, stockTotals, stockMatches};
+    return {products, exact, normalized, importedAt: record.importedAt, stockReport, stockTotals, stockMatches, hasProductIds: ids.size > 0};
   }
 
   function findProduct(code){
@@ -833,6 +835,11 @@
   }
 
   function activateCatalog(record){
+    stockReport = record.stockReport || null;
+    if(!record.products.length){
+      renderInventoryStats();
+      return;
+    }
     if(awaitingConfirm) closeConfirm();
     catalog = indexCatalog(record);
     // Migrate standalone counts by UPC. When aliases were counted separately,
@@ -913,7 +920,12 @@
   }
 
   function renderInventoryStats(){
-    if(!catalog) return;
+    const reportSaved = stockReport ? 'Stock report saved (' +
+      numberFormat.format(stockReport.totals.length) + ' IDs). Import the BottlePOS items CSV to match barcodes.' : '';
+    if(!catalog){
+      inventoryStatus.textContent = reportSaved;
+      return;
+    }
     let counted = 0, different = 0, systemQty = 0, countedQty = 0, missing = 0;
     catalog.products.forEach(product => {
       systemQty += product.systemQty;
@@ -929,7 +941,9 @@
     inventoryStatus.textContent = numberFormat.format(total) + ' products imported ' +
       new Date(catalog.importedAt).toLocaleString() +
       (missing ? '. ' + missing + ' saved count(s) reference items missing from inventory.' : '');
-    if(catalog.stockReport){
+    if(stockReport && !catalog.hasProductIds){
+      inventoryStatus.textContent += '. ' + reportSaved;
+    }else if(stockReport){
       inventoryStatus.textContent += '. Stock report imported ' +
         new Date(catalog.stockReport.importedAt).toLocaleString() + ' (' +
         numberFormat.format(catalog.stockMatches) + ' matched, ' +
@@ -1313,6 +1327,7 @@
     qtySave.textContent = add ? 'Add & Continue' : 'Save & Continue';
     qtyAdd.textContent = add ? 'Edit Count' : 'Add to Count';
     qtyAdd.hidden = !existing && !catalog;
+    qtyRemove.hidden = !existing;
     confirmHint.textContent = add ? 'Enter the quantity to add.' :
       existing ? 'Saving replaces the previous count.' : 'Enter the physical quantity.';
   }
@@ -1352,6 +1367,11 @@
   qtyAdd.addEventListener('click', () => {
     setCountMode(!addingCount);
     qtyInput.focus();
+  });
+  qtyRemove.addEventListener('click', () => {
+    if(!currentBarcode || !counts[currentBarcode] || !confirm('Remove the saved count for this item?')) return;
+    removeCount(currentBarcode);
+    closeConfirm();
   });
   qtySave.addEventListener('click', saveCurrent);
   qtyCancel.addEventListener('click', closeConfirm);
@@ -1444,13 +1464,17 @@
     </div>`;
   }
 
+  function removeCount(code){
+    delete counts[code];
+    saveState();
+    refreshCount();
+    renderListIfOpen();
+  }
+
   listContainer.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-del]');
     if(btn){
-      delete counts[btn.getAttribute('data-del')];
-      saveState();
-      refreshCount();
-      renderList();
+      removeCount(btn.getAttribute('data-del'));
       return;
     }
     const row = e.target.closest('.item-row');
