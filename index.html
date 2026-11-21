@@ -418,6 +418,9 @@
   .item-code{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}
   .item-time{font-size:10px;color:var(--muted);margin-top:2px;}
   .item-right{display:flex;align-items:center;gap:10px;}
+  .item-quantities{display:flex;align-items:flex-start;}
+  .item-quantity{text-align:right;margin-left:8px;}
+  .item-quantity-label{display:block;font-size:10px;color:var(--muted);}
   .item-qty{
     font-family:'IBM Plex Mono',monospace;
     font-size:16px;
@@ -427,6 +430,7 @@
     text-align:right;
     font-variant-numeric:tabular-nums;
   }
+  .item-qty-system{color:var(--text);}
   .item-del{background:transparent;border:none;color:var(--muted);font-size:16px;padding:4px 6px;}
   .item-del:active{color:var(--danger);}
   .empty-state{color:var(--muted);font-size:12px;text-align:center;padding:24px 0;}
@@ -1336,7 +1340,7 @@
       confirmMeta.textContent = catalog ? 'Missing from inventory' :
         (source ? String(source).replace(/_/g, '-') + ' · ' : '') + barcode.length + ' chars';
     }
-    setCountMode(false);
+    setCountMode(Boolean(existing));
     confirmOverlay.classList.add('open');
     setTimeout(() => { if(awaitingConfirm) qtyInput.focus(); }, 50);
     return true;
@@ -1346,11 +1350,11 @@
     addingCount = add;
     const existing = counts[currentBarcode];
     qtyInput.value = !add && existing ? existing.qty : '';
-    qtySave.textContent = add ? 'Add & Continue' : 'Save & Continue';
-    qtyAdd.textContent = add ? 'Edit Count' : 'Add to Count';
-    qtyAdd.hidden = !existing && !catalog;
+    qtySave.textContent = add ? 'Add to Count' : existing ? 'Update Count' : 'Save Count';
+    qtyAdd.textContent = add ? 'Update Count' : 'Add to Count';
+    qtyAdd.hidden = !existing;
     qtyRemove.hidden = !existing;
-    confirmHint.textContent = add ? 'Enter the quantity to add.' :
+    confirmHint.textContent = add ? 'Current count: ' + existing.qty + '. Enter the quantity to add.' :
       existing ? 'Saving replaces the previous count.' : 'Enter the physical quantity.';
   }
 
@@ -1452,7 +1456,6 @@
     const time = count && count.ts ?
       new Date(count.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
     const delta = product ? difference(count, product) : null;
-    const system = product ? ' · System ' + numberFormat.format(product.systemQty) : '';
     const stockQty = product && catalog.stockTotals.get(product.id);
     const reported = stockQty !== undefined && product ? ' · Stock report ' + numberFormat.format(stockQty) : '';
     const variance = delta === null ? '' : ' · <span class="' + differenceClass(delta) +
@@ -1462,10 +1465,19 @@
     return `<div class="item-row" data-code="${esc(code)}">
       <div>
         <div class="item-code">${esc(product ? product.name || code : code)}</div>
-        <div class="item-time">${metadata}${system}${reported}${variance}</div>
+        <div class="item-time">${metadata}${reported}${variance}</div>
       </div>
       <div class="item-right">
-        <div class="item-qty">${count ? esc(String(count.qty)) : '—'}</div>
+        <div class="item-quantities">
+          <div class="item-quantity">
+            <span class="item-quantity-label">System Qty</span>
+            <div class="item-qty item-qty-system">${product ? numberFormat.format(product.systemQty) : '—'}</div>
+          </div>
+          <div class="item-quantity">
+            <span class="item-quantity-label">Counted Qty</span>
+            <div class="item-qty">${esc(String(count.qty))}</div>
+          </div>
+        </div>
         ${count ? '<button class="item-del" aria-label="Remove count" data-del="' + esc(code) + '">&#10005;</button>' : ''}
       </div>
     </div>`;
