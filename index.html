@@ -85,11 +85,14 @@
   .viewfinder{
     position:relative;
     width:100%;
-    aspect-ratio:4/3;
+    height:360px;
     background:#000;
     border-radius:6px;
     overflow:hidden;
     border:1px solid var(--line);
+  }
+  @supports (aspect-ratio:4/3){
+    .viewfinder{height:auto;aspect-ratio:4/3;}
   }
   .viewfinder video, .viewfinder canvas{
     position:absolute;
@@ -100,7 +103,7 @@
   .viewfinder.idle::after{
     content:"CAMERA OFF";
     position:absolute;
-    inset:0;
+    top:0;right:0;bottom:0;left:0;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -111,7 +114,7 @@
     background:var(--panel);
     z-index:5;
   }
-  .frame-corners{position:absolute;inset:0;z-index:3;pointer-events:none;}
+  .frame-corners{position:absolute;top:0;right:0;bottom:0;left:0;z-index:3;pointer-events:none;}
   .frame-corners span{
     position:absolute;
     width:22px;height:22px;
@@ -222,12 +225,13 @@
   .readout .rejected{color:var(--danger);}
 
   /* Symbology picker */
+  .scan-settings{margin-top:16px;}
+  .scan-settings summary{cursor:pointer;}
   .fmt-label{
     font-size:10px;
     text-transform:uppercase;
     letter-spacing:0.1em;
     color:var(--muted);
-    margin-top:16px;
   }
   .fmt-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
   .fmt-chip{
@@ -273,7 +277,7 @@
   /* Confirm panel */
   .confirm-overlay{
     position:fixed;
-    inset:0;
+    top:0;right:0;bottom:0;left:0;
     background:rgba(10,11,7,0.72);
     display:none;
     align-items:flex-end;
@@ -288,6 +292,8 @@
     border-top:1px solid var(--line);
     border-radius:14px 14px 0 0;
     padding:20px 18px 24px;
+    max-height:100%;
+    overflow:auto;
   }
   .confirm-barcode-label{
     font-size:10px;
@@ -317,6 +323,31 @@
     margin-bottom:14px;
     min-height:16px;
   }
+  .confirm-product{font-size:15px;font-weight:600;overflow-wrap:break-word;}
+  .qty-summary,.inventory-stats{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    margin:8px 0 12px;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .qty-summary strong,.inventory-stats strong{display:block;font-size:15px;color:var(--text);}
+  .difference-negative,.qty-summary .difference-negative{color:var(--danger);}
+  .difference-match,.qty-summary .difference-match{color:var(--led);}
+  .entry-status{font-size:12px;color:var(--danger);margin-top:6px;}
+  .entry-status:empty{display:none;}
+  .inventory-tools{margin-bottom:14px;}
+  .inventory-tools button,.inventory-filter,.btn-add-count,.list-more{
+    background:var(--panel);color:var(--text);border:1px solid var(--line);
+    border-radius:5px;padding:8px 10px;font-size:13px;
+  }
+  .inventory-status{font-size:12px;color:var(--muted);margin-top:6px;}
+  .inventory-filter{width:100%;margin-bottom:10px;}
+  .btn-add-count{margin-top:8px;width:100%;}
+  .list-more{margin-top:8px;width:100%;}
+  .item-row>div:first-child{min-width:0;overflow-wrap:break-word;}
+  [hidden]{display:none!important;}
   .qty-row{display:flex;align-items:stretch;gap:8px;margin-bottom:16px;}
   .qty-step{
     width:52px;
@@ -328,6 +359,7 @@
   }
   .qty-input{
     flex:1;
+    min-width:0;
     background:var(--panel-2);
     border:1px solid var(--line);
     border-radius:6px;
@@ -425,23 +457,15 @@
     letter-spacing:0.03em;
   }
   
-@media (max-width: 375px) {
-  .scan-section {
-    padding: 10px 8px 12px;
-  }
-
-
-.viewfinder {
-  height: 80vw;
-  max-height: 300px;
-  aspect-ratio: auto;
-}
-
-
-  .fmt-label,
-  .fmt-row {
-    display: none;
-  }
+@media (max-width: 375px){
+  .scan-section{padding:10px 8px 12px;}
+  .viewfinder{height:80vw;min-height:220px;max-height:300px;aspect-ratio:auto;}
+  .manual-row input{min-width:0;font-size:16px;}
+  .confirm-card{padding:12px;}
+  .confirm-barcode{font-size:16px;}
+  .confirm-hint,.qty-row{margin-bottom:8px;}
+  .footer{flex-wrap:wrap;}
+  .footer button{padding:9px;font-size:12px;}
 }
 
 </style>
@@ -477,35 +501,52 @@
     <div class="cam-status" id="camStatus"></div>
     <div class="readout" id="readout"></div>
 
-    <div class="fmt-label">Barcode type on your labels</div>
-    <div class="fmt-row" id="fmtRow">
-      <button class="fmt-chip active" data-fmt="auto">ALL</button>
-      <button class="fmt-chip" data-fmt="retail">EAN / UPC</button>
-      <button class="fmt-chip" data-fmt="code128">CODE 128</button>
-      <button class="fmt-chip" data-fmt="code39">CODE 39</button>
-      <button class="fmt-chip" data-fmt="itf">ITF</button>
-    </div>
-
     <div class="manual-label">Or enter barcode manually</div>
     <div class="manual-row">
       <input type="text" id="manualInput" inputmode="numeric" placeholder="Type or paste stock code">
       <button id="manualBtn">Add</button>
     </div>
+
+    <div class="entry-status" id="entryStatus" role="status"></div>
+    <details class="scan-settings">
+      <summary class="fmt-label">Scanner settings · Barcode types</summary>
+      <div class="fmt-row" id="fmtRow">
+        <button class="fmt-chip active" data-fmt="auto">ALL</button>
+        <button class="fmt-chip" data-fmt="retail">EAN / UPC</button>
+        <button class="fmt-chip" data-fmt="code128">CODE 128</button>
+        <button class="fmt-chip" data-fmt="code39">CODE 39</button>
+        <button class="fmt-chip" data-fmt="itf">ITF</button>
+      </div>
+    </details>
   </div>
 
   <div class="history-section">
+    <div class="inventory-tools">
+      <button type="button" id="importBtn" disabled>Import Inventory</button>
+      <input type="file" id="inventoryFile" accept=".csv,text/csv" hidden>
+      <div class="inventory-status" id="inventoryStatus" role="status"></div>
+      <div class="inventory-stats" id="inventoryStats" hidden></div>
+    </div>
     <div class="history-header" id="historyHeader">
-      <div class="history-title">Counted items</div>
+      <div class="history-title" id="historyTitle">Counted items</div>
       <div class="chevron" id="chevron">&#9660;</div>
     </div>
     <div class="history-body" id="historyBody">
+      <select id="inventoryFilter" class="inventory-filter" aria-label="Inventory filter" hidden>
+        <option value="all">All</option>
+        <option value="counted">Counted</option>
+        <option value="remaining">Not Counted</option>
+        <option value="differences">Differences</option>
+      </select>
       <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
       <div id="listContainer"></div>
+      <button type="button" id="listMore" class="list-more" hidden>Show more</button>
     </div>
   </div>
 
   <div class="footer">
     <button class="btn-export" id="exportBtn">Export CSV</button>
+    <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
     <button class="btn-clear" id="clearBtn">Clear all</button>
   </div>
   <div class="save-note">Progress auto-saves to this browser</div>
@@ -513,9 +554,11 @@
 
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-card">
+    <div class="confirm-product" id="confirmProduct" hidden></div>
     <div class="confirm-barcode-label">Stock code</div>
     <div class="confirm-barcode mono" id="confirmBarcode">—</div>
     <div class="confirm-meta" id="confirmMeta"></div>
+    <div class="qty-summary" id="confirmSummary" hidden></div>
     <div class="confirm-hint" id="confirmHint"></div>
     <div class="qty-row">
       <button class="qty-step" id="qtyMinus">&minus;</button>
@@ -526,17 +569,22 @@
       <button class="btn-cancel" id="qtyCancel">Cancel</button>
       <button class="btn-save" id="qtySave">Save &amp; Continue</button>
     </div>
+    <button type="button" class="btn-add-count" id="qtyAdd">Add to Count</button>
   </div>
 </div>
 
 <script>
 (function(){
   const STORAGE_KEY = 'counts';
-  let counts = {};
+  let counts = Object.create(null);
+  let catalog = null;
+  let loadingCatalog = true;
+  let listLimit = 200;
   let scanning = false;
   let awaitingConfirm = false;
   let currentBarcode = null;
-  let currentSource = '';
+  let currentUPC = '';
+  let addingCount = false;
 
   const el = (id) => document.getElementById(id);
   const viewfinder = el('viewfinder');
@@ -545,6 +593,14 @@
   const torchBtn = el('torchBtn');
   const camStatus = el('camStatus');
   const readout = el('readout');
+  const entryStatus = el('entryStatus');
+  const importBtn = el('importBtn');
+  const inventoryFile = el('inventoryFile');
+  const inventoryStatus = el('inventoryStatus');
+  const inventoryStats = el('inventoryStats');
+  const inventoryFilter = el('inventoryFilter');
+  const listMore = el('listMore');
+  const detailExportBtn = el('detailExportBtn');
   const countBadge = el('countBadge');
   const lockFill = el('lockFill');
   const fmtRow = el('fmtRow');
@@ -554,6 +610,9 @@
   const confirmBarcode = el('confirmBarcode');
   const confirmMeta = el('confirmMeta');
   const confirmHint = el('confirmHint');
+  const confirmProduct = el('confirmProduct');
+  const confirmSummary = el('confirmSummary');
+  const qtyAdd = el('qtyAdd');
   const qtyInput = el('qtyInput');
   const qtySave = el('qtySave');
   const qtyCancel = el('qtyCancel');
@@ -579,12 +638,16 @@
   };
   let currentFmt = 'auto';
 
-  fmtRow.addEventListener('click', (e) => {
+  fmtRow.addEventListener('click', async (e) => {
     const chip = e.target.closest('.fmt-chip');
     if(!chip) return;
     currentFmt = chip.getAttribute('data-fmt');
     [...fmtRow.querySelectorAll('.fmt-chip')].forEach(c => c.classList.toggle('active', c === chip));
-    if(scanning){ stopScanning(); setTimeout(startScanning, 250); }
+    if(cameraStartup) await cameraStartup.catch(() => {});
+    if(scanning && !cameraStartup){
+      stopScanning();
+      startScanning();
+    }
   });
 
   // ---------- storage ----------
@@ -609,9 +672,9 @@
         if(res && res.value){ raw = res.value; }
       }catch(e){}
     }
-    try{ counts = raw ? (JSON.parse(raw) || {}) : {}; }catch(e){ counts = {}; }
+    try{ if(raw) Object.assign(counts, JSON.parse(raw)); }catch(e){}
     refreshCount();
-    if(historyBody.classList.contains('open')) renderList();
+    renderListIfOpen();
   }
 
   function saveState(){
@@ -631,6 +694,209 @@
   }
   function refreshCount(){
     countBadge.textContent = Object.keys(counts).length.toLocaleString();
+    renderInventoryStats();
+  }
+
+  // ---------- BottlePOS catalog ----------
+  const inventoryColumns = ['Stock Code', 'UPC Full', 'Name', 'Size', 'Qty On Hand', 'Total Qty On Hand'];
+  const numberFormat = new Intl.NumberFormat(undefined, {maximumFractionDigits: 8});
+
+  function parseCSV(text){
+    const rows = [];
+    let row = [], value = '', quoted = false, closed = false;
+    text = text.replace(/^\uFEFF/, '');
+    for(let i = 0; i < text.length; i++){
+      const char = text[i];
+      if(quoted){
+        if(char === '"' && text[i + 1] === '"'){ value += '"'; i++; }
+        else if(char === '"'){ quoted = false; closed = true; }
+        else value += char;
+      }else if(char === ',' || char === '\r' || char === '\n'){
+        row.push(value);
+        value = '';
+        closed = false;
+        if(char !== ','){
+          rows.push(row);
+          row = [];
+          if(char === '\r' && text[i + 1] === '\n') i++;
+        }
+      }else if(char === '"' && !value && !closed){
+        quoted = true;
+      }else{
+        if(closed || char === '"') throw new Error('Invalid CSV quoting near record ' + (rows.length + 1) + '.');
+        value += char;
+      }
+    }
+    if(quoted) throw new Error('The CSV contains an unclosed quoted field.');
+    if(row.length || value || closed) rows.push(row.concat(value));
+    return rows;
+  }
+
+  function readCatalog(text){
+    const rows = parseCSV(text);
+    const header = (rows.shift() || []).map(field => field.trim());
+    const columns = inventoryColumns.map(name => header.indexOf(name));
+    if(columns.includes(-1)) throw new Error('Select a BottlePOS inventory CSV with the required stock and quantity columns.');
+    const products = new Map();
+    rows.forEach((row, index) => {
+      if(row.every(field => !field.trim())) return;
+      const [stockCode, upc, name, size, qtyOnHand, total] = columns.map(column => (row[column] || '').trim());
+      const systemQty = Number(total.replace(/,/g, ''));
+      if(row.length !== header.length || !stockCode || !total || !Number.isFinite(systemQty) || products.has(stockCode)){
+        throw new Error('Invalid or duplicate product in CSV record ' + (index + 2) + '.');
+      }
+      products.set(stockCode, {stockCode, upc, name, size, qtyOnHand, systemQty});
+    });
+    if(!products.size) throw new Error('No inventory products were found in the CSV.');
+    return {importedAt: Date.now(), products: Array.from(products.values())};
+  }
+
+  function barcodeKey(code){
+    const digits = code.replace(/^\+(?=\d+$)/, '');
+    return normalize(/^0\d{13}$/.test(digits) ? digits.slice(1) : digits, '');
+  }
+
+  function indexCatalog(record){
+    const products = new Map();
+    const exact = new Map();
+    const normalized = new Map();
+    function register(index, code, product){
+      if(index.has(code) && index.get(code) !== product) index.set(code, null);
+      else index.set(code, product);
+    }
+    record.products.forEach(product => {
+      products.set(product.stockCode, product);
+      const codes = [product.stockCode].concat(product.stockCode.split(','), product.upc.split(','));
+      codes.map(code => code.trim()).filter(Boolean).forEach(code => {
+        register(exact, code, product);
+        register(normalized, barcodeKey(code), product);
+      });
+    });
+    return {products, exact, normalized, importedAt: record.importedAt};
+  }
+
+  function findProduct(code){
+    return catalog.products.get(code) ||
+      (catalog.exact.has(code) ? catalog.exact.get(code) : catalog.normalized.get(barcodeKey(code)));
+  }
+
+  function inventoryRecord(record){
+    return new Promise((resolve, reject) => {
+      if(!window.indexedDB){ reject(new Error('IndexedDB is unavailable.')); return; }
+      const open = window.indexedDB.open('stockcounter.inventory', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('catalog');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const transaction = db.transaction('catalog', record ? 'readwrite' : 'readonly');
+        const store = transaction.objectStore('catalog');
+        const request = record ? store.put(record, 'current') : store.get('current');
+        transaction.oncomplete = () => { db.close(); resolve(request.result); };
+        transaction.onabort = () => { db.close(); reject(transaction.error || request.error); };
+      };
+    });
+  }
+
+  function activateCatalog(record){
+    if(awaitingConfirm) closeConfirm();
+    catalog = indexCatalog(record);
+    // Migrate standalone counts by UPC. When aliases were counted separately,
+    // keep the most recently entered quantity without adding counts together.
+    let migrated = false;
+    Object.keys(counts).forEach(code => {
+      const count = counts[code];
+      if(count.stockCode) return;
+      if(catalog.products.has(code)){
+        count.stockCode = code;
+        migrated = true;
+        return;
+      }
+      const product = findProduct(code);
+      if(!product) return;
+      const stockCode = product.stockCode;
+      if(!counts[stockCode] || count.ts > counts[stockCode].ts){
+        counts[stockCode] = Object.assign({}, count, {stockCode, upc: code});
+      }
+      delete counts[code];
+      migrated = true;
+    });
+    if(migrated) saveState();
+    el('historyTitle').textContent = 'Inventory products';
+    historyBody.classList.add('open');
+    chevron.classList.add('open');
+    inventoryFilter.hidden = false;
+    inventoryFilter.value = 'all';
+    inventoryStats.hidden = false;
+    detailExportBtn.hidden = false;
+    searchInput.placeholder = 'Search name, stock code or UPC…';
+    listLimit = 200;
+    entryStatus.textContent = '';
+    refreshCount();
+    renderList();
+  }
+
+  function readFile(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  }
+
+  importBtn.addEventListener('click', () => inventoryFile.click());
+  inventoryFile.addEventListener('change', async () => {
+    const file = inventoryFile.files[0];
+    if(!file || importBtn.disabled) return;
+    importBtn.disabled = true;
+    inventoryFile.value = '';
+    inventoryStatus.textContent = 'Importing inventory…';
+    try{
+      const record = readCatalog(await readFile(file));
+      await inventoryRecord(record);
+      if(scanning) stopScanning();
+      activateCatalog(record);
+    }catch(error){
+      const message = error && error.message ? error.message : 'Browser storage failed.';
+      inventoryStatus.textContent = 'Import failed. ' + message;
+    }finally{
+      importBtn.disabled = false;
+    }
+  });
+
+  function difference(count, product){
+    return count ? Number((Number(count.qty) - product.systemQty).toFixed(8)) : null;
+  }
+
+  function differenceClass(value){
+    return value < 0 ? 'difference-negative' : value === 0 ? 'difference-match' : '';
+  }
+
+  function statistic(label, value, className){
+    return '<div>' + label + '<strong class="' + (className || '') + '">' +
+      (value === null ? '—' : numberFormat.format(value)) + '</strong></div>';
+  }
+
+  function renderInventoryStats(){
+    if(!catalog) return;
+    let counted = 0, different = 0, systemQty = 0, countedQty = 0, missing = 0;
+    catalog.products.forEach(product => {
+      systemQty += product.systemQty;
+      const count = counts[product.stockCode];
+      if(count){
+        counted++;
+        countedQty += Number(count.qty);
+        if(difference(count, product) !== 0) different++;
+      }
+    });
+    Object.keys(counts).forEach(code => { if(!catalog.products.has(code)) missing++; });
+    const total = catalog.products.size;
+    inventoryStatus.textContent = numberFormat.format(total) + ' products imported ' +
+      new Date(catalog.importedAt).toLocaleString() +
+      (missing ? '. ' + missing + ' saved count(s) reference items missing from inventory.' : '');
+    inventoryStats.innerHTML = statistic('Catalog products', total) + statistic('Counted products', counted) +
+      statistic('Remaining products', total - counted) + statistic('With differences', different) +
+      statistic('Total system qty', systemQty) + statistic('Total counted qty', countedQty);
   }
 
   // ---------- validation ----------
@@ -708,8 +974,8 @@
 
   function vote(code, format){
     if(awaitingConfirm || !scanning) return;
-    code = normalize(code, format);
-    if(!plausible(code, format)) return;
+    if(!catalog) code = normalize(code, format);
+    if(!code || (!catalog && !plausible(code, format))) return;
     const now = Date.now();
     votes = votes.filter(v => now - v.t < VOTE_WINDOW_MS);
     votes.push({ code, t: now });
@@ -724,10 +990,10 @@
   }
 
   function accept(code, format){
+    if(!openConfirm(code, format)) return;
     if(navigator.vibrate) navigator.vibrate(60);
     viewfinder.classList.add('flash');
     setTimeout(() => viewfinder.classList.remove('flash'), 350);
-    openConfirm(code, format);
   }
 
   function esc(s){
@@ -740,11 +1006,13 @@
   let mediaStream = null;
   let videoEl = null;
   let loopTimer = null;
+  let cameraStartup = null;
 
   async function tryNative(){
     if(!('BarcodeDetector' in window) || !navigator.mediaDevices) return false;
     try{
       const supported = await window.BarcodeDetector.getSupportedFormats();
+      if(!scanning) return false;
       const want = FORMAT_SETS[currentFmt].native.filter(f => supported.indexOf(f) !== -1);
       if(!want.length) return false;
       detector = new window.BarcodeDetector({ formats: want });
@@ -752,6 +1020,11 @@
       mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
       });
+
+      if(!scanning){
+        cleanupNative();
+        return false;
+      }
 
       videoEl = document.createElement('video');
       videoEl.setAttribute('playsinline','');
@@ -761,6 +1034,7 @@
       videoEl.srcObject = mediaStream;
       viewfinder.insertBefore(videoEl, viewfinder.firstChild);
       await videoEl.play();
+      if(!scanning) return false;
 
       engine = 'native';
       neededReads = 2;
@@ -777,18 +1051,19 @@
   }
 
   function nativeLoop(){
+    const video = videoEl;
     const step = async () => {
-      if(!scanning || engine !== 'native') return;
+      if(!scanning || videoEl !== video) return;
       if(!awaitingConfirm && videoEl && videoEl.readyState >= 2){
         try{
           const found = await detector.detect(videoEl);
-          if(found.length){
+          if(found.length && videoEl === video){
             const best = found[0];
             vote(String(best.rawValue).trim(), best.format);
           }
         }catch(e){ /* transient decode error */ }
       }
-      loopTimer = setTimeout(step, 70);
+      if(videoEl === video) loopTimer = setTimeout(step, 70);
     };
     step();
   }
@@ -807,7 +1082,7 @@
 
   // ---------- engine: Quagga fallback ----------
   function startQuagga(){
-    Quagga.init({
+    return new Promise((resolve, reject) => Quagga.init({
       inputStream: {
         type: 'LiveStream',
         target: viewfinder,
@@ -819,13 +1094,24 @@
       numOfWorkers: navigator.hardwareConcurrency ? Math.min(4, navigator.hardwareConcurrency) : 2,
       frequency: 10
     }, function(err){
+      if(!scanning){
+        try{
+          if(!err) Quagga.stop();
+          resolve();
+        }catch(e){
+          reject(e);
+        }
+        return;
+      }
       if(err){
         console.error(err);
         scanning = false;
         camStatus.textContent = 'Camera unavailable here — this can happen inside an embedded preview. Open the file directly in your phone\'s browser, or use manual entry below.';
         camStatus.classList.add('err');
+        resolve();
         return;
       }
+      Quagga.onDetected(handleQuagga);
       Quagga.start();
       engine = 'quagga';
       neededReads = 3;
@@ -836,9 +1122,8 @@
       if(vc){ vc.style.position='absolute'; vc.style.top=0; vc.style.left=0; vc.style.width='100%'; vc.style.height='100%'; vc.style.objectFit='cover'; }
       const cv = viewfinder.querySelector('canvas.drawingBuffer');
       if(cv){ cv.style.display='none'; }
-    });
-
-    Quagga.onDetected(handleQuagga);
+      resolve();
+    }));
   }
 
   function handleQuagga(result){
@@ -857,15 +1142,30 @@
 
   // ---------- start / stop ----------
   async function startScanning(){
-    if(scanning) return;
+    if(loadingCatalog || scanning || cameraStartup) return;
+    entryStatus.textContent = '';
+    startBtn.disabled = true;
     camStatus.classList.remove('err');
     camStatus.textContent = 'Requesting camera…';
     votes = [];
     seenLog = [];
     updateLock(0);
     scanning = true;
-    const ok = await tryNative();
-    if(!ok && scanning){ startQuagga(); }
+    cameraStartup = (async () => {
+      const ok = await tryNative();
+      if(!ok && scanning) await startQuagga();
+    })();
+    try{
+      await cameraStartup;
+    }catch(e){
+      stopScanning();
+      camStatus.textContent = 'Camera unavailable. You can enter the barcode manually.';
+      camStatus.classList.add('err');
+      console.error(e);
+    }finally{
+      cameraStartup = null;
+      startBtn.disabled = false;
+    }
   }
 
   function onStarted(msg){
@@ -906,6 +1206,7 @@
 
   function tuneTrack(){
     setTimeout(() => {
+      if(!scanning || !engine) return;
       const track = activeTrack();
       if(!track || !track.getCapabilities) return;
       let caps = {};
@@ -929,21 +1230,46 @@
 
   // ---------- confirm panel ----------
   function openConfirm(barcode, source){
-    awaitingConfirm = true;
-    currentBarcode = barcode;
-    currentSource = source || '';
-    confirmBarcode.textContent = barcode;
-    confirmMeta.textContent = (source ? String(source).replace(/_/g,'-') + ' · ' : '') + barcode.length + ' chars';
-    const existing = counts[barcode];
-    if(existing){
-      confirmHint.textContent = 'Already counted — last entered: ' + existing.qty + '. Saving will overwrite it.';
-      qtyInput.value = existing.qty;
-    }else{
-      confirmHint.textContent = 'New item';
-      qtyInput.value = '';
+    const editing = source === 'edit';
+    const product = catalog && (editing ? catalog.products.get(barcode) : findProduct(barcode));
+    if(catalog && !product && !editing){
+      entryStatus.textContent = 'Barcode not found in inventory';
+      return false;
     }
+    entryStatus.textContent = '';
+    awaitingConfirm = true;
+    currentBarcode = product ? product.stockCode : barcode;
+    const existing = counts[currentBarcode];
+    currentUPC = editing ? (existing && existing.upc) || '' : barcode;
+    confirmBarcode.textContent = currentBarcode;
+    confirmProduct.hidden = !product;
+    confirmSummary.hidden = !product;
+    if(product){
+      confirmProduct.textContent = product.name + (product.size && product.size !== 'NULL' ? ' · ' + product.size : '');
+      confirmMeta.textContent = 'UPC ' + (currentUPC || product.upc || '—');
+      const delta = difference(existing, product);
+      confirmSummary.innerHTML = statistic('System Qty', product.systemQty) +
+        statistic('Counted Qty', existing ? Number(existing.qty) : null) +
+        statistic('Difference', delta, differenceClass(delta));
+    }else{
+      confirmMeta.textContent = catalog ? 'Missing from inventory' :
+        (source ? String(source).replace(/_/g, '-') + ' · ' : '') + barcode.length + ' chars';
+    }
+    setCountMode(false);
     confirmOverlay.classList.add('open');
-    setTimeout(()=>{ qtyInput.focus(); qtyInput.select(); }, 50);
+    setTimeout(() => { if(awaitingConfirm) qtyInput.focus(); }, 50);
+    return true;
+  }
+
+  function setCountMode(add){
+    addingCount = add;
+    const existing = counts[currentBarcode];
+    qtyInput.value = !add && existing ? existing.qty : '';
+    qtySave.textContent = add ? 'Add & Continue' : 'Save & Continue';
+    qtyAdd.textContent = add ? 'Edit Count' : 'Add to Count';
+    qtyAdd.hidden = !existing && !catalog;
+    confirmHint.textContent = add ? 'Enter the quantity to add.' :
+      existing ? 'Saving replaces the previous count.' : 'Enter the physical quantity.';
   }
 
   function closeConfirm(){
@@ -959,14 +1285,29 @@
   function saveCurrent(){
     if(!currentBarcode) return;
     const val = qtyInput.value.trim();
-    if(val === ''){ qtyInput.focus(); return; }
-    counts[currentBarcode] = { qty: val, ts: Date.now() };
+    const existing = counts[currentBarcode];
+    const previous = existing ? Number(existing.qty) : 0;
+    const qty = addingCount ? Number((previous + Number(val)).toFixed(8)) : val;
+    if(!val || !Number.isFinite(Number(qty))){ qtyInput.focus(); return; }
+    const count = {qty, ts: Date.now()};
+    if(catalog && catalog.products.has(currentBarcode)){
+      count.stockCode = currentBarcode;
+      count.upc = currentUPC || (existing && existing.upc) || '';
+    }else if(existing && existing.stockCode){
+      count.stockCode = existing.stockCode;
+      count.upc = existing.upc;
+    }
+    counts[currentBarcode] = count;
     saveState();
     refreshCount();
-    renderList();
+    renderListIfOpen();
     closeConfirm();
   }
 
+  qtyAdd.addEventListener('click', () => {
+    setCountMode(!addingCount);
+    qtyInput.focus();
+  });
   qtySave.addEventListener('click', saveCurrent);
   qtyCancel.addEventListener('click', closeConfirm);
   qtyInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrent(); } });
@@ -976,92 +1317,185 @@
   startBtn.addEventListener('click', startScanning);
   stopBtn.addEventListener('click', stopScanning);
 
+  function stopForManualEntry(){
+    if(scanning) stopScanning();
+  }
+
+  manualInput.addEventListener('focus', stopForManualEntry);
+  manualInput.addEventListener('input', () => {
+    stopForManualEntry();
+    entryStatus.textContent = '';
+  });
   manualBtn.addEventListener('click', () => {
     const v = manualInput.value.trim();
-    if(!v) return;
-    manualInput.value = '';
-    openConfirm(v, 'manual');
+    if(!v || loadingCatalog) return;
+    stopForManualEntry();
+    if(openConfirm(v, 'manual')) manualInput.value = '';
   });
   manualInput.addEventListener('keydown', (e) => {
     if(e.key === 'Enter'){ e.preventDefault(); manualBtn.click(); }
   });
 
-  // ---------- history list ----------
+  // ---------- inventory and history ----------
   historyHeader.addEventListener('click', () => {
     const open = historyBody.classList.toggle('open');
     chevron.classList.toggle('open', open);
-    if(open) renderList();
+    renderListIfOpen();
   });
 
-  function renderList(){
-    const filter = searchInput.value.trim().toLowerCase();
-    const entries = Object.entries(counts)
-      .filter(([code]) => !filter || code.toLowerCase().includes(filter))
-      .sort((a,b) => (b[1].ts||0) - (a[1].ts||0))
-      .slice(0, 200);
+  function renderListIfOpen(){
+    if(historyBody.classList.contains('open')) renderList();
+  }
 
-    if(entries.length === 0){
-      listContainer.innerHTML = '<div class="empty-state">No items counted yet.</div>';
-      return;
+  function renderList(){
+    const query = searchInput.value.trim().toLowerCase();
+    const filter = catalog ? inventoryFilter.value : 'counted';
+    const rows = [];
+    if(catalog){
+      catalog.products.forEach(product => {
+        const code = product.stockCode;
+        const count = counts[code];
+        if(filter === 'counted' && !count || filter === 'remaining' && count) return;
+        if(filter === 'differences' && (!count || difference(count, product) === 0)) return;
+        const fields = [code, product.upc, product.name, product.size];
+        if(query && !fields.some(field => field.toLowerCase().includes(query))) return;
+        rows.push({code, count, product});
+      });
     }
-    listContainer.innerHTML = entries.map(([code, data]) => {
-      const time = data.ts ? new Date(data.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
-      return `<div class="item-row" data-code="${esc(code)}">
-        <div>
-          <div class="item-code">${esc(code)}</div>
-          <div class="item-time">${time}</div>
-        </div>
-        <div class="item-right">
-          <div class="item-qty">${esc(String(data.qty))}</div>
-          <button class="item-del" data-del="${esc(code)}">&#10005;</button>
-        </div>
-      </div>`;
-    }).join('');
+    if(filter === 'all' || filter === 'counted'){
+      Object.keys(counts).forEach(code => {
+        if(catalog && catalog.products.has(code) || query && !code.toLowerCase().includes(query)) return;
+        rows.push({code, count: counts[code]});
+      });
+    }
+    if(!catalog || filter === 'counted'){
+      rows.sort((a,b) => (b.count.ts || 0) - (a.count.ts || 0));
+    }
+    listMore.hidden = rows.length <= listLimit;
+    listContainer.innerHTML = rows.length ? rows.slice(0, listLimit).map(renderItem).join('') :
+      '<div class="empty-state">No matching items.</div>';
+  }
+
+  function renderItem({code, count, product}){
+    const time = count && count.ts ?
+      new Date(count.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+    const delta = product ? difference(count, product) : null;
+    const system = product ? ' · System ' + numberFormat.format(product.systemQty) : '';
+    const variance = delta === null ? '' : ' · <span class="' + differenceClass(delta) +
+      '">Difference ' + numberFormat.format(delta) + '</span>';
+    const metadata = product ? esc(code + (product.size && product.size !== 'NULL' ? ' · ' + product.size : '')) :
+      catalog ? 'Missing from inventory' : esc(time);
+    return `<div class="item-row" data-code="${esc(code)}">
+      <div>
+        <div class="item-code">${esc(product ? product.name || code : code)}</div>
+        <div class="item-time">${metadata}${system}${variance}</div>
+      </div>
+      <div class="item-right">
+        <div class="item-qty">${count ? esc(String(count.qty)) : '—'}</div>
+        ${count ? '<button class="item-del" aria-label="Remove count" data-del="' + esc(code) + '">&#10005;</button>' : ''}
+      </div>
+    </div>`;
   }
 
   listContainer.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-del]');
     if(btn){
-      const code = btn.getAttribute('data-del');
-      delete counts[code];
+      delete counts[btn.getAttribute('data-del')];
       saveState();
       refreshCount();
       renderList();
       return;
     }
     const row = e.target.closest('.item-row');
-    if(row){ openConfirm(row.getAttribute('data-code'), 'edit'); }
+    if(row) openConfirm(row.getAttribute('data-code'), 'edit');
   });
 
-  searchInput.addEventListener('input', renderList);
+  function resetList(){
+    listLimit = 200;
+    renderList();
+  }
+  searchInput.addEventListener('input', resetList);
+  inventoryFilter.addEventListener('change', resetList);
+  listMore.addEventListener('click', () => { listLimit += 200; renderList(); });
 
-  // ---------- export / clear ----------
-  exportBtn.addEventListener('click', () => {
-    const entries = Object.entries(counts);
-    if(entries.length === 0){ alert('No items counted yet.'); return; }
-    const csv = entries.map(([code, data]) => `${code},${data.qty}`).join('\n') + '\n';
-    const blob = new Blob([csv], { type: 'text/csv' });
+  // ---------- exports ----------
+  function csvCell(value){
+    const text = value === null || value === undefined ? '' : String(value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  }
+
+  function downloadCSV(rows, prefix, newline){
+    const csv = rows.map(row => row.map(csvCell).join(',')).join(newline) + newline;
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
     a.href = url;
-    a.download = `stock-count-${stamp}.csv`;
+    a.download = prefix + stamp + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  exportBtn.addEventListener('click', () => {
+    const entries = Object.entries(counts);
+    if(!entries.length){ alert('No items counted yet.'); return; }
+    downloadCSV(entries.map(([code, count]) => {
+      const product = catalog && catalog.products.get(code);
+      const upc = product && product.upc.split(',')[0].trim();
+      return [count.upc || upc || code, count.qty];
+    }), 'stock-count-', '\n');
+  });
+
+  detailExportBtn.addEventListener('click', () => {
+    if(!catalog) return;
+    const rows = [['Stock Code','UPC','Product Name','Size','System Qty','Counted Qty','Difference','Last Counted Date']];
+    function countedColumns(count){
+      return [count ? count.qty : '', count && count.ts ? new Date(count.ts).toISOString() : ''];
+    }
+    catalog.products.forEach(product => {
+      const count = counts[product.stockCode];
+      const [quantity, date] = countedColumns(count);
+      rows.push([product.stockCode, product.upc, product.name, product.size,
+        product.systemQty, quantity, difference(count, product), date]);
+    });
+    Object.keys(counts).forEach(code => {
+      if(catalog.products.has(code)) return;
+      const count = counts[code];
+      const [quantity, date] = countedColumns(count);
+      rows.push([code, count.upc || '', '', '', '', quantity, '', date]);
+    });
+    downloadCSV(rows, 'stock-count-details-', '\r\n');
   });
 
   clearBtn.addEventListener('click', () => {
     if(Object.keys(counts).length === 0) return;
     if(!confirm('Clear all counted items? This cannot be undone.')) return;
-    counts = {};
+    counts = Object.create(null);
     saveState();
     refreshCount();
     renderList();
   });
 
-  loadState();
+  async function initialize(){
+    startBtn.disabled = true;
+    manualBtn.disabled = true;
+    await loadState();
+    try{
+      const record = await inventoryRecord();
+      if(record) activateCatalog(record);
+      importBtn.disabled = false;
+    }catch(error){
+      inventoryStatus.textContent = 'Inventory storage is unavailable in this browser.';
+    }finally{
+      loadingCatalog = false;
+      startBtn.disabled = false;
+      manualBtn.disabled = false;
+    }
+  }
+
+  initialize();
 })();
 </script>
 </body>
