@@ -338,12 +338,12 @@
   .entry-status{font-size:12px;color:var(--danger);margin-top:6px;}
   .entry-status:empty{display:none;}
   .inventory-tools{margin-bottom:14px;}
-  .inventory-tools button,.inventory-filter,.btn-add-count,.list-more{
+  .inventory-tools button,.btn-add-count,.list-more{
     background:var(--panel);color:var(--text);border:1px solid var(--line);
     border-radius:5px;padding:8px 10px;font-size:13px;
   }
   .inventory-status{font-size:12px;color:var(--muted);margin-top:6px;}
-  .inventory-filter{width:100%;margin-bottom:10px;}
+  .inventory-tools .btn-clear-inventory{color:var(--danger);}
   .btn-add-count{margin-top:8px;width:100%;}
   .btn-remove-count{color:var(--danger);}
   .list-more{margin-top:8px;width:100%;}
@@ -524,21 +524,16 @@
   <div class="history-section">
     <div class="inventory-tools">
       <button type="button" id="importBtn" disabled>Import Inventory</button>
+      <button type="button" class="btn-clear-inventory" id="clearInventoryBtn" disabled>Clear Imported Data</button>
       <input type="file" id="inventoryFile" accept=".csv,text/csv" hidden>
       <div class="inventory-status" id="inventoryStatus" role="status"></div>
       <div class="inventory-stats" id="inventoryStats" hidden></div>
     </div>
     <div class="history-header" id="historyHeader">
-      <div class="history-title" id="historyTitle">Counted items</div>
+      <div class="history-title">Counted items</div>
       <div class="chevron" id="chevron">&#9660;</div>
     </div>
     <div class="history-body" id="historyBody">
-      <select id="inventoryFilter" class="inventory-filter" aria-label="Inventory filter" hidden>
-        <option value="all">All</option>
-        <option value="counted">Counted</option>
-        <option value="remaining">Not Counted</option>
-        <option value="differences">Differences</option>
-      </select>
       <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
       <div id="listContainer"></div>
       <button type="button" id="listMore" class="list-more" hidden>Show more</button>
@@ -548,7 +543,7 @@
   <div class="footer">
     <button class="btn-export" id="exportBtn">Export CSV</button>
     <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
-    <button class="btn-clear" id="clearBtn">Clear all</button>
+    <button class="btn-clear" id="clearBtn">Clear Counts</button>
   </div>
   <div class="save-note">Progress auto-saves to this browser</div>
 </div>
@@ -601,7 +596,7 @@
   const inventoryFile = el('inventoryFile');
   const inventoryStatus = el('inventoryStatus');
   const inventoryStats = el('inventoryStats');
-  const inventoryFilter = el('inventoryFilter');
+  const clearInventoryBtn = el('clearInventoryBtn');
   const listMore = el('listMore');
   const detailExportBtn = el('detailExportBtn');
   const countBadge = el('countBadge');
@@ -825,9 +820,12 @@
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const db = open.result;
-        const transaction = db.transaction('catalog', record ? 'readwrite' : 'readonly');
+        const transaction = db.transaction('catalog', record === undefined ? 'readonly' : 'readwrite');
         const store = transaction.objectStore('catalog');
-        const request = record ? store.put(record, 'current') : store.get('current');
+        let request;
+        if(record === null) request = store.delete('current');
+        else if(record === undefined) request = store.get('current');
+        else request = store.put(record, 'current');
         transaction.oncomplete = () => { db.close(); resolve(request.result); };
         transaction.onabort = () => { db.close(); reject(transaction.error || request.error); };
       };
@@ -863,11 +861,8 @@
       migrated = true;
     });
     if(migrated) saveState();
-    el('historyTitle').textContent = 'Inventory products';
     historyBody.classList.add('open');
     chevron.classList.add('open');
-    inventoryFilter.hidden = false;
-    inventoryFilter.value = 'all';
     inventoryStats.hidden = false;
     detailExportBtn.hidden = false;
     searchInput.placeholder = 'Search name, stock code or UPC…';
@@ -891,6 +886,7 @@
     const file = inventoryFile.files[0];
     if(!file || importBtn.disabled) return;
     importBtn.disabled = true;
+    clearInventoryBtn.disabled = true;
     inventoryFile.value = '';
     inventoryStatus.textContent = 'Importing inventory…';
     try{
@@ -903,6 +899,32 @@
       inventoryStatus.textContent = 'Import failed. ' + message;
     }finally{
       importBtn.disabled = false;
+      clearInventoryBtn.disabled = !catalog && !stockReport;
+    }
+  });
+
+  clearInventoryBtn.addEventListener('click', async () => {
+    if(importBtn.disabled || (!catalog && !stockReport)) return;
+    if(!confirm('Clear the imported items and stock report? Saved counts will be kept.')) return;
+    importBtn.disabled = true;
+    clearInventoryBtn.disabled = true;
+    try{
+      await inventoryRecord(null);
+      if(awaitingConfirm) closeConfirm();
+      catalog = null;
+      stockReport = null;
+      inventoryStats.hidden = true;
+      detailExportBtn.hidden = true;
+      searchInput.placeholder = 'Filter by stock code…';
+      entryStatus.textContent = '';
+      refreshCount();
+      renderListIfOpen();
+      inventoryStatus.textContent = 'Imported data cleared. Saved counts were kept.';
+    }catch(error){
+      inventoryStatus.textContent = 'Could not clear imported data.';
+    }finally{
+      importBtn.disabled = false;
+      clearInventoryBtn.disabled = !catalog && !stockReport;
     }
   });
 
@@ -1414,31 +1436,16 @@
 
   function renderList(){
     const query = searchInput.value.trim().toLowerCase();
-    const filter = catalog ? inventoryFilter.value : 'counted';
-    const rows = [];
-    if(catalog){
-      catalog.products.forEach(product => {
-        const code = product.stockCode;
-        const count = counts[code];
-        if(filter === 'counted' && !count || filter === 'remaining' && count) return;
-        if(filter === 'differences' && (!count || difference(count, product) === 0)) return;
-        const fields = [code, product.upc, product.name, product.size];
-        if(query && !fields.some(field => field.toLowerCase().includes(query))) return;
-        rows.push({code, count, product});
-      });
-    }
-    if(filter === 'all' || filter === 'counted'){
-      Object.keys(counts).forEach(code => {
-        if(catalog && catalog.products.has(code) || query && !code.toLowerCase().includes(query)) return;
-        rows.push({code, count: counts[code]});
-      });
-    }
-    if(!catalog || filter === 'counted'){
-      rows.sort((a,b) => (b.count.ts || 0) - (a.count.ts || 0));
-    }
+    const rows = Object.keys(counts).map(code => ({
+      code, count: counts[code], product: catalog && catalog.products.get(code)
+    })).filter(({code, product}) => {
+      const fields = product ? [code, product.upc, product.name, product.size] : [code];
+      return !query || fields.some(field => field.toLowerCase().includes(query));
+    });
+    rows.sort((a,b) => (b.count.ts || 0) - (a.count.ts || 0));
     listMore.hidden = rows.length <= listLimit;
     listContainer.innerHTML = rows.length ? rows.slice(0, listLimit).map(renderItem).join('') :
-      '<div class="empty-state">No matching items.</div>';
+      (query ? '<div class="empty-state">No matching counts.</div>' : '<div class="empty-state">No items counted yet.</div>');
   }
 
   function renderItem({code, count, product}){
@@ -1486,7 +1493,6 @@
     renderList();
   }
   searchInput.addEventListener('input', resetList);
-  inventoryFilter.addEventListener('change', resetList);
   listMore.addEventListener('click', () => { listLimit += 200; renderList(); });
 
   // ---------- exports ----------
@@ -1557,6 +1563,7 @@
       const record = await inventoryRecord();
       if(record) activateCatalog(record);
       importBtn.disabled = false;
+      clearInventoryBtn.disabled = !catalog && !stockReport;
     }catch(error){
       inventoryStatus.textContent = 'Inventory storage is unavailable in this browser.';
     }finally{
