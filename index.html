@@ -547,8 +547,11 @@
   <div class="footer">
     <button class="btn-export" id="exportBtn">Export CSV</button>
     <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
+    <button class="btn-export" id="restoreCountsBtn" disabled>Restore Counted CSV</button>
+    <input type="file" id="restoreCountsFile" accept=".csv,text/csv" hidden>
     <button class="btn-clear" id="clearBtn">Clear Counts</button>
   </div>
+  <div class="save-note" id="restoreCountsStatus" role="status"></div>
   <div class="save-note">Progress auto-saves to this browser</div>
 </div>
 
@@ -628,6 +631,9 @@
   const searchInput = el('searchInput');
   const exportBtn = el('exportBtn');
   const clearBtn = el('clearBtn');
+  const restoreCountsBtn = el('restoreCountsBtn');
+  const restoreCountsFile = el('restoreCountsFile');
+  const restoreCountsStatus = el('restoreCountsStatus');
 
   // ---------- symbology sets ----------
   const FORMAT_SETS = {
@@ -1558,6 +1564,62 @@
     downloadCSV(rows, 'stock-count-details-', '\r\n');
   });
 
+  function restoredCounts(text){
+    const pending = Object.assign(Object.create(null), counts);
+    const rows = parseCSV(text).filter(row => row.some(cell => cell.trim()));
+    const header = rows[0]?.map(cell => cell.trim().toLowerCase());
+    if(header?.length === 2 && ['barcode', 'upc', 'stock code'].includes(header[0]) &&
+       ['qty', 'quantity', 'counted qty', 'counted quantity'].includes(header[1])) rows.shift();
+    if(!rows.length) throw new Error('The CSV has no counted items.');
+
+    let added = 0;
+    const seen = new Map();
+    for(const row of rows){
+      const [barcode, qty] = row.map(cell => cell.trim());
+      if(row.length !== 2 || !barcode || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(qty) ||
+         !Number.isFinite(Number(qty))){
+        throw new Error('Expected a barcode and quantity on every row.');
+      }
+      const product = catalog ? findProduct(barcode) : null;
+      const code = product ? product.stockCode : barcode;
+      if(seen.has(code) && seen.get(code) !== Number(qty)){
+        throw new Error('Conflicting quantities for ' + code + '.');
+      }
+      seen.set(code, Number(qty));
+      if(Object.hasOwn(pending, code)) continue;
+      const count = {qty, ts: Date.now()};
+      if(product){
+        count.stockCode = code;
+        count.upc = barcode;
+      }
+      pending[code] = count;
+      added++;
+    }
+    return {pending, added, skipped: rows.length - added};
+  }
+
+  restoreCountsBtn.addEventListener('click', () => restoreCountsFile.click());
+  restoreCountsFile.addEventListener('change', async () => {
+    const file = restoreCountsFile.files[0];
+    restoreCountsFile.value = '';
+    if(!file) return;
+    restoreCountsBtn.disabled = true;
+    try{
+      const {pending, added, skipped} = restoredCounts(await readFile(file));
+      if(added){
+        if(!lsSet(JSON.stringify(pending))) throw new Error('This browser could not save the counts.');
+        counts = pending;
+        refreshCount();
+        renderListIfOpen();
+      }
+      restoreCountsStatus.textContent = 'Restored ' + added + ' counts. Skipped ' + skipped + ' existing or repeated rows.';
+    }catch(error){
+      restoreCountsStatus.textContent = 'Restore failed. ' + error.message;
+    }finally{
+      restoreCountsBtn.disabled = false;
+    }
+  });
+
   clearBtn.addEventListener('click', () => {
     if(Object.keys(counts).length === 0) return;
     if(!confirm('Clear all counted items? This cannot be undone.')) return;
@@ -1580,6 +1642,7 @@
       inventoryStatus.textContent = 'Inventory storage is unavailable in this browser.';
     }finally{
       loadingCatalog = false;
+      restoreCountsBtn.disabled = false;
       startBtn.disabled = false;
       manualBtn.disabled = false;
     }
