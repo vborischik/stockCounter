@@ -22,19 +22,19 @@
     --danger: #E85C4A;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0;overflow:hidden;}
   body{
     background:var(--bg);
     color:var(--text);
     font-family:'Inter',system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;
-    min-height:100vh;
   }
   .mono{font-family:'IBM Plex Mono',monospace;}
   .app{
     max-width:520px;
     margin:0 auto;
-    min-height:100vh;
+    height:100vh;
+    height:100dvh;
     display:flex;
     flex-direction:column;
     background:var(--bg);
@@ -42,15 +42,16 @@
     border-right:1px solid var(--line);
   }
 
+  .app-content{flex:1;min-height:0;overflow:auto;overscroll-behavior-y:contain;}
+  .app > :not(.app-content){flex-shrink:0;}
+
   /* Header */
   .topbar{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:14px 16px;
+    padding:8px 12px;
     border-bottom:1px solid var(--line);
-    position:sticky;
-    top:0;
     background:var(--bg);
     z-index:20;
   }
@@ -66,7 +67,7 @@
   .brand-sub{font-size:11px;color:var(--muted);letter-spacing:0.02em;}
   .count-badge{
     font-family:'IBM Plex Mono',monospace;
-    font-size:20px;
+    font-size:18px;
     font-weight:700;
     color:var(--led);
     text-shadow:0 0 12px rgba(74,222,128,0.35);
@@ -85,14 +86,12 @@
   .viewfinder{
     position:relative;
     width:100%;
-    height:360px;
+    height:240px;
+    height:clamp(140px, 35dvh, 300px);
     background:#000;
     border-radius:6px;
     overflow:hidden;
     border:1px solid var(--line);
-  }
-  @supports (aspect-ratio:4/3){
-    .viewfinder{height:auto;aspect-ratio:4/3;}
   }
   .viewfinder video, .viewfinder canvas{
     position:absolute;
@@ -337,7 +336,9 @@
   .difference-match,.qty-summary .difference-match{color:var(--led);}
   .entry-status{font-size:12px;color:var(--danger);margin-top:6px;}
   .entry-status:empty{display:none;}
-  .inventory-tools{margin-bottom:14px;}
+  .inventory-tools{margin-bottom:12px;}
+  .inventory-tools summary{cursor:pointer;font-size:13px;padding:6px 0;}
+  .inventory-tools[open] summary{margin-bottom:6px;}
   .inventory-tools button,.btn-add-count,.list-more{
     background:var(--panel);color:var(--text);border:1px solid var(--line);
     border-radius:5px;padding:8px 10px;font-size:13px;
@@ -437,11 +438,9 @@
 
   /* Footer */
   .footer{
-    position:sticky;
-    bottom:0;
     display:flex;
-    gap:8px;
-    padding:12px 16px;
+    gap:6px;
+    padding:8px 12px;
     background:var(--bg);
     border-top:1px solid var(--line);
   }
@@ -454,6 +453,7 @@
     padding:13px;
     font-size:13px;
   }
+  .save-note:empty{display:none;}
   .save-note{
     text-align:center;
     font-size:10px;
@@ -464,7 +464,6 @@
   
 @media (max-width: 375px){
   .scan-section{padding:10px 8px 12px;}
-  .viewfinder{height:80vw;min-height:220px;max-height:300px;aspect-ratio:auto;}
   .manual-row input{min-width:0;font-size:16px;}
   .confirm-card{padding:12px;}
   .confirm-barcode{font-size:16px;}
@@ -489,67 +488,71 @@
     </div>
   </div>
 
-  <div class="scan-section">
-    <div class="viewfinder idle" id="viewfinder">
-      <div class="frame-corners">
-        <span class="fc-tl"></span><span class="fc-tr"></span>
-        <span class="fc-bl"></span><span class="fc-br"></span>
+  <main class="app-content">
+    <div class="scan-section">
+      <div class="viewfinder idle" id="viewfinder">
+        <div class="frame-corners">
+          <span class="fc-tl"></span><span class="fc-tr"></span>
+          <span class="fc-bl"></span><span class="fc-br"></span>
+        </div>
+        <div class="laser-line" id="laserLine"></div>
+        <div class="lock-wrap"><div class="lock-fill" id="lockFill"></div></div>
       </div>
-      <div class="laser-line" id="laserLine"></div>
-      <div class="lock-wrap"><div class="lock-fill" id="lockFill"></div></div>
-    </div>
-    <div class="scan-controls">
-      <button class="btn-primary" id="startBtn">Start Scanning</button>
-      <button class="btn-stop" id="stopBtn" style="display:none;">Stop</button>
-      <button class="btn-torch" id="torchBtn" title="Light">&#9728;</button>
-    </div>
-    <div class="cam-status" id="camStatus"></div>
-    <div class="readout" id="readout"></div>
-
-    <div class="manual-label">Or enter barcode manually</div>
-    <div class="manual-row">
-      <input type="text" id="manualInput" inputmode="numeric" placeholder="Type or paste stock code">
-      <button id="manualBtn">Add</button>
-    </div>
-
-    <div class="entry-status" id="entryStatus" role="status"></div>
-    <details class="scan-settings">
-      <summary class="fmt-label">Scanner settings · Barcode types</summary>
-      <div class="fmt-row" id="fmtRow">
-        <button class="fmt-chip active" data-fmt="auto">ALL</button>
-        <button class="fmt-chip" data-fmt="retail">EAN / UPC</button>
-        <button class="fmt-chip" data-fmt="code128">CODE 128</button>
-        <button class="fmt-chip" data-fmt="code39">CODE 39</button>
-        <button class="fmt-chip" data-fmt="itf">ITF</button>
+      <div class="scan-controls">
+        <button class="btn-primary" id="startBtn">Start Scanning</button>
+        <button class="btn-stop" id="stopBtn" style="display:none;">Stop</button>
+        <button class="btn-torch" id="torchBtn" title="Light">&#9728;</button>
       </div>
-    </details>
-  </div>
+      <div class="cam-status" id="camStatus"></div>
+      <div class="readout" id="readout"></div>
 
-  <div class="history-section">
-    <div class="inventory-tools">
-      <button type="button" id="importBtn" disabled>Import Inventory</button>
-      <button type="button" class="btn-clear-inventory" id="clearInventoryBtn" disabled>Clear Imported Data</button>
-      <input type="file" id="inventoryFile" accept=".csv,text/csv" hidden>
-      <div class="inventory-status" id="inventoryStatus" role="status"></div>
-      <div class="inventory-stats" id="inventoryStats" hidden></div>
+      <div class="manual-label">Or enter barcode manually</div>
+      <div class="manual-row">
+        <input type="text" id="manualInput" inputmode="numeric" placeholder="Type or paste stock code">
+        <button id="manualBtn">Add</button>
+      </div>
+
+      <div class="entry-status" id="entryStatus" role="status"></div>
+      <details class="scan-settings">
+        <summary class="fmt-label">Scanner settings · Barcode types</summary>
+        <div class="fmt-row" id="fmtRow">
+          <button class="fmt-chip active" data-fmt="auto">ALL</button>
+          <button class="fmt-chip" data-fmt="retail">EAN / UPC</button>
+          <button class="fmt-chip" data-fmt="code128">CODE 128</button>
+          <button class="fmt-chip" data-fmt="code39">CODE 39</button>
+          <button class="fmt-chip" data-fmt="itf">ITF</button>
+        </div>
+      </details>
     </div>
-    <div class="history-header" id="historyHeader">
-      <div class="history-title">Counted items</div>
-      <div class="chevron" id="chevron">&#9660;</div>
+
+    <div class="history-section">
+      <details class="inventory-tools">
+        <summary>Inventory Tools</summary>
+        <button type="button" id="importBtn" disabled>Import Inventory</button>
+        <button type="button" class="btn-clear-inventory" id="clearInventoryBtn" hidden disabled>Clear Imported Data</button>
+        <input type="file" id="inventoryFile" accept=".csv,text/csv" hidden>
+        <div class="inventory-status" id="inventoryStatus" role="status"></div>
+        <div class="inventory-stats" id="inventoryStats" hidden></div>
+      </details>
+      <div class="history-header" id="historyHeader">
+        <div class="history-title">Counted items</div>
+        <div class="chevron" id="chevron">&#9660;</div>
+      </div>
+      <div class="history-body" id="historyBody">
+        <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
+        <div id="listContainer"></div>
+        <button type="button" id="listMore" class="list-more" hidden>Show more</button>
+      </div>
     </div>
-    <div class="history-body" id="historyBody">
-      <input type="text" class="search-input" id="searchInput" placeholder="Filter by stock code&hellip;">
-      <div id="listContainer"></div>
-      <button type="button" id="listMore" class="list-more" hidden>Show more</button>
-    </div>
-  </div>
+
+  </main>
 
   <div class="footer">
     <button class="btn-export" id="exportBtn">Export CSV</button>
     <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
     <button class="btn-export" id="restoreCountsBtn" disabled>Restore Counted CSV</button>
     <input type="file" id="restoreCountsFile" accept=".csv,text/csv" hidden>
-    <button class="btn-clear" id="clearBtn">Clear Counts</button>
+    <button class="btn-clear" id="clearBtn" hidden>Clear Counts</button>
   </div>
   <div class="save-note" id="restoreCountsStatus" role="status"></div>
   <div class="save-note">Progress auto-saves to this browser</div>
