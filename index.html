@@ -344,7 +344,7 @@
     border-radius:5px;padding:8px 10px;font-size:13px;
   }
   .inventory-status{font-size:12px;color:var(--muted);margin-top:6px;}
-  .inventory-tools .btn-clear-inventory{color:var(--danger);}
+  .data-cleanup button{color:var(--danger);margin:0 4px 4px 0;}
   .btn-add-count{margin-top:8px;width:100%;}
   .btn-remove-count{color:var(--danger);}
   .list-more{margin-top:8px;width:100%;}
@@ -445,14 +445,6 @@
     border-top:1px solid var(--line);
   }
   .btn-export{flex:2;background:var(--amber);color:#241A02;padding:13px;font-size:14px;}
-  .btn-clear{
-    flex:1;
-    background:transparent;
-    border:1px solid var(--line);
-    color:var(--danger);
-    padding:13px;
-    font-size:13px;
-  }
   .save-note:empty{display:none;}
   .save-note{
     text-align:center;
@@ -529,10 +521,15 @@
       <details class="inventory-tools">
         <summary>Inventory Tools</summary>
         <button type="button" id="importBtn" disabled>Import Inventory</button>
-        <button type="button" class="btn-clear-inventory" id="clearInventoryBtn" hidden disabled>Clear Imported Data</button>
         <input type="file" id="inventoryFile" accept=".csv,text/csv" hidden>
         <div class="inventory-status" id="inventoryStatus" role="status"></div>
         <div class="inventory-stats" id="inventoryStats" hidden></div>
+      </details>
+      <details class="inventory-tools data-cleanup">
+        <summary>Data Cleanup</summary>
+        <button type="button" id="clearBtn" disabled>Clear Counts</button>
+        <button type="button" id="clearInventoryBtn" disabled>Clear Imported Data</button>
+        <div class="inventory-status" id="cleanupStatus" role="status"></div>
       </details>
       <div class="history-header" id="historyHeader">
         <div class="history-title">Counted items</div>
@@ -552,7 +549,6 @@
     <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
     <button class="btn-export" id="restoreCountsBtn" disabled>Restore Counted CSV</button>
     <input type="file" id="restoreCountsFile" accept=".csv,text/csv" hidden>
-    <button class="btn-clear" id="clearBtn" hidden>Clear Counts</button>
   </div>
   <div class="save-note" id="restoreCountsStatus" role="status"></div>
   <div class="save-note">Progress auto-saves to this browser</div>
@@ -634,6 +630,7 @@
   const searchInput = el('searchInput');
   const exportBtn = el('exportBtn');
   const clearBtn = el('clearBtn');
+  const cleanupStatus = el('cleanupStatus');
   const restoreCountsBtn = el('restoreCountsBtn');
   const restoreCountsFile = el('restoreCountsFile');
   const restoreCountsStatus = el('restoreCountsStatus');
@@ -705,7 +702,9 @@
     navigator.storage.persist().catch(()=>{});
   }
   function refreshCount(){
-    countBadge.textContent = Object.keys(counts).length.toLocaleString();
+    const count = Object.keys(counts).length;
+    countBadge.textContent = count.toLocaleString();
+    clearBtn.disabled = loadingCatalog || count === 0;
     renderInventoryStats();
   }
 
@@ -919,10 +918,13 @@
   clearInventoryBtn.addEventListener('click', async () => {
     if(importBtn.disabled || (!catalog && !stockReport)) return;
     if(!confirm('Clear the imported items and stock report? Saved counts will be kept.')) return;
+    if(!confirm('Delete the imported data from this browser now? You can import the CSVs again later.')) return;
+    cleanupStatus.textContent = 'Clearing imported data…';
     importBtn.disabled = true;
     clearInventoryBtn.disabled = true;
     try{
       await inventoryRecord(null);
+      if(scanning) stopScanning();
       if(awaitingConfirm) closeConfirm();
       catalog = null;
       stockReport = null;
@@ -932,9 +934,9 @@
       entryStatus.textContent = '';
       refreshCount();
       renderListIfOpen();
-      inventoryStatus.textContent = 'Imported data cleared. Saved counts were kept.';
+      cleanupStatus.textContent = 'Imported data cleared. Saved counts were kept.';
     }catch(error){
-      inventoryStatus.textContent = 'Could not clear imported data.';
+      cleanupStatus.textContent = 'Could not clear imported data from this browser.';
     }finally{
       importBtn.disabled = false;
       clearInventoryBtn.disabled = !catalog && !stockReport;
@@ -1624,12 +1626,23 @@
   });
 
   clearBtn.addEventListener('click', () => {
-    if(Object.keys(counts).length === 0) return;
-    if(!confirm('Clear all counted items? This cannot be undone.')) return;
+    if(clearBtn.disabled || restoreCountsBtn.disabled) return;
+    const total = Object.keys(counts).length;
+    if(!confirm('Clear saved counts for ' + total + ' item(s)? Imported inventory will be kept.')) return;
+    if(!confirm('Permanently delete these counts from this browser?')) return;
+    if(!lsSet('{}')){
+      cleanupStatus.textContent = 'Could not clear saved counts from this browser.';
+      return;
+    }
+    if(window.storage && window.storage.set){
+      window.storage.set(STORAGE_KEY, '{}', false).catch(() => {});
+    }
+    if(scanning) stopScanning();
+    if(awaitingConfirm) closeConfirm();
     counts = Object.create(null);
-    saveState();
     refreshCount();
-    renderList();
+    renderListIfOpen();
+    cleanupStatus.textContent = 'Counts cleared. Imported inventory was kept.';
   });
 
   async function initialize(){
@@ -1645,6 +1658,7 @@
       inventoryStatus.textContent = 'Inventory storage is unavailable in this browser.';
     }finally{
       loadingCatalog = false;
+      clearBtn.disabled = Object.keys(counts).length === 0;
       restoreCountsBtn.disabled = false;
       startBtn.disabled = false;
       manualBtn.disabled = false;
