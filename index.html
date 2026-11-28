@@ -767,39 +767,44 @@
     const columns = inventoryColumns.map(name => header.indexOf(name));
     if(columns.includes(-1)) throw new Error('Select a BottlePOS inventory CSV with the required stock and quantity columns.');
     const products = new Map();
-    rows.forEach((row, index) => {
+    let skippedRows = 0;
+    rows.forEach(row => {
       if(row.every(field => !field.trim())) return;
       const [stockCode, upc, name, size, qtyOnHand, total] = columns.map(column => (row[column] || '').trim());
       const systemQty = Number(total.replace(/,/g, ''));
-      if(row.length !== header.length || !stockCode || !total || !Number.isFinite(systemQty) || products.has(stockCode)){
-        throw new Error('Invalid or duplicate product in CSV record ' + (index + 2) + '.');
-      }
       const id = (row[idColumn] || '').trim();
-      if(id && ids.has(id)) throw new Error('Duplicate BottlePOS ID in CSV record ' + (index + 2) + '.');
+      if(row.length !== header.length || !stockCode || !upc || !name || !size || !qtyOnHand || !total ||
+         !Number.isFinite(systemQty) || products.has(stockCode) || (idColumn !== -1 && (!id || ids.has(id)))){
+        skippedRows++;
+        return;
+      }
       if(id) ids.add(id);
       products.set(stockCode, {id, stockCode, upc, name, size, qtyOnHand, systemQty});
     });
-    if(!products.size) throw new Error('No inventory products were found in the CSV.');
-    return {importedAt: Date.now(), products: Array.from(products.values()), stockReport};
+    if(!products.size) throw new Error('No valid inventory rows. Skipped ' + skippedRows + ' rows.');
+    return {importedAt: Date.now(), products: Array.from(products.values()), skippedRows, stockReport};
   }
 
   function readStockReport(header, rows){
-    const columns = ['ID', 'Qty'].map(name => header.indexOf(name));
+    const columns = ['ID', 'Location', 'Qty'].map(name => header.indexOf(name));
     const totals = new Map();
-    rows.forEach((row, index) => {
+    let skippedRows = 0;
+    rows.forEach(row => {
       if(row.every(field => !field.trim())) return;
-      const [id, value] = columns.map(column => (row[column] || '').trim());
+      const [id, location, value] = columns.map(column => (row[column] || '').trim());
       const qty = Number(value.replace(/,/g, ''));
       const total = (totals.get(id) || 0) + qty;
-      if(row.length !== header.length || !id || !value || !Number.isFinite(total)){
-        throw new Error('Invalid stock quantity in CSV record ' + (index + 2) + '.');
+      if(row.length !== header.length || !id || !location || !value || !Number.isFinite(total)){
+        skippedRows++;
+        return;
       }
       totals.set(id, total);
     });
-    if(!totals.size) throw new Error('No stock report quantities were found.');
+    if(!totals.size) throw new Error('No valid stock report rows. Skipped ' + skippedRows + ' rows.');
     return {importedAt: catalog ? catalog.importedAt : null,
       products: catalog ? Array.from(catalog.products.values()) : [],
-      stockReport: {importedAt: Date.now(), totals: Array.from(totals.entries())}};
+      skippedRows: catalog ? catalog.skippedRows : 0,
+      stockReport: {importedAt: Date.now(), skippedRows, totals: Array.from(totals.entries())}};
 
   }
 
@@ -829,7 +834,7 @@
     const ids = new Set(record.products.map(product => product.id).filter(Boolean));
     let stockMatches = 0;
     stockTotals.forEach((qty, id) => { if(ids.has(id)) stockMatches++; });
-    return {products, exact, normalized, importedAt: record.importedAt, stockReport, stockTotals, stockMatches, hasProductIds: ids.size > 0};
+    return {products, exact, normalized, importedAt: record.importedAt, skippedRows: record.skippedRows, stockReport, stockTotals, stockMatches, hasProductIds: ids.size > 0};
   }
 
   function findProduct(code){
@@ -970,8 +975,10 @@
   }
 
   function renderInventoryStats(){
+    const reportSkipped = stockReport && stockReport.skippedRows ?
+      ' Skipped ' + numberFormat.format(stockReport.skippedRows) + ' stock report rows.' : '';
     const reportSaved = stockReport ? 'Stock report saved (' +
-      numberFormat.format(stockReport.totals.length) + ' IDs). Import the BottlePOS items CSV to match barcodes.' : '';
+      numberFormat.format(stockReport.totals.length) + ' IDs). Import the BottlePOS items CSV to match barcodes.' + reportSkipped : '';
     if(!catalog){
       inventoryStatus.textContent = reportSaved;
       return;
@@ -991,13 +998,16 @@
     inventoryStatus.textContent = numberFormat.format(total) + ' products imported ' +
       new Date(catalog.importedAt).toLocaleString() +
       (missing ? '. ' + missing + ' saved count(s) reference items missing from inventory.' : '');
+    if(catalog.skippedRows){
+      inventoryStatus.textContent += ' Skipped ' + numberFormat.format(catalog.skippedRows) + ' inventory rows.';
+    }
     if(stockReport && !catalog.hasProductIds){
       inventoryStatus.textContent += '. ' + reportSaved;
     }else if(stockReport){
       inventoryStatus.textContent += '. Stock report imported ' +
         new Date(catalog.stockReport.importedAt).toLocaleString() + ' (' +
         numberFormat.format(catalog.stockMatches) + ' matched, ' +
-        numberFormat.format(catalog.stockTotals.size - catalog.stockMatches) + ' unmatched IDs).';
+        numberFormat.format(catalog.stockTotals.size - catalog.stockMatches) + ' unmatched IDs).' + reportSkipped;
     }
     inventoryStats.innerHTML = statistic('Catalog products', total) + statistic('Counted products', counted) +
       statistic('Remaining products', total - counted) + statistic('With differences', different) +
@@ -1610,7 +1620,7 @@
       const [barcode, qty] = row.map(cell => cell.trim());
       if(row.length !== 2 || !barcode || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(qty) ||
          !Number.isFinite(Number(qty))){
-        throw new Error('Expected a barcode and quantity on every row.');
+        continue;
       }
       const product = catalog ? findProduct(barcode) : null;
       const code = product ? product.stockCode : barcode;
@@ -1644,7 +1654,7 @@
         refreshCount();
         renderListIfOpen();
       }
-      restoreCountsStatus.textContent = 'Restored ' + added + ' counts. Skipped ' + skipped + ' existing or repeated rows.';
+      restoreCountsStatus.textContent = 'Restored ' + added + ' counts. Skipped ' + skipped + ' invalid, existing, or repeated rows.';
     }catch(error){
       restoreCountsStatus.textContent = 'Restore failed. ' + error.message;
     }finally{
