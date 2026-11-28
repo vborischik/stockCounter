@@ -344,7 +344,6 @@
     border-radius:5px;padding:8px 10px;font-size:13px;
   }
   .inventory-status{font-size:12px;color:var(--muted);margin-top:6px;}
-  .data-cleanup button{color:var(--danger);margin:0 4px 4px 0;}
   .btn-add-count{margin-top:8px;width:100%;}
   .btn-remove-count{color:var(--danger);}
   .list-more{margin-top:8px;width:100%;}
@@ -437,14 +436,27 @@
   .empty-state{color:var(--muted);font-size:12px;text-align:center;padding:24px 0;}
 
   /* Footer */
-  .footer{
-    display:flex;
-    gap:6px;
-    padding:8px 12px;
-    background:var(--bg);
-    border-top:1px solid var(--line);
+  .system-menu{position:relative;margin-left:10px;}
+  .topbar .brand{margin-right:auto;}
+  .system-menu summary{
+    display:grid;place-items:center;list-style:none;cursor:pointer;
+    width:44px;height:44px;border:1px solid var(--line);border-radius:6px;
+    color:var(--text);font-size:22px;
   }
-  .btn-export{flex:2;background:var(--amber);color:#241A02;padding:13px;font-size:14px;}
+  .system-menu summary::-webkit-details-marker{display:none;}
+  .system-menu-panel{
+    position:absolute;right:0;top:calc(100% + 6px);width:220px;max-width:calc(100vw - 24px);
+    max-height:calc(100vh - 70px);overflow:auto;padding:8px;border:1px solid var(--line);
+    border-radius:6px;background:var(--panel);
+  }
+  .system-menu-panel button{
+    display:block;width:100%;min-height:44px;padding:8px;text-align:left;
+    background:transparent;color:var(--text);font-size:13px;
+  }
+  .system-menu-panel button:disabled{opacity:.45;}
+  .system-menu-panel .inventory-status:empty{display:none;}
+  .system-menu-cleanup{border-top:1px solid var(--line);margin-top:4px;padding-top:4px;}
+  .system-menu-cleanup button{color:var(--danger);}
   .save-note:empty{display:none;}
   .save-note{
     text-align:center;
@@ -460,8 +472,6 @@
   .confirm-card{padding:12px;}
   .confirm-barcode{font-size:16px;}
   .confirm-hint,.qty-row{margin-bottom:8px;}
-  .footer{flex-wrap:wrap;}
-  .footer button{padding:9px;font-size:12px;}
 }
 
 </style>
@@ -478,6 +488,21 @@
       <div class="count-badge mono" id="countBadge">0</div>
       <div class="count-label">counted</div>
     </div>
+    <details class="system-menu" id="systemMenu">
+      <summary aria-label="System menu" title="System menu">&#9776;</summary>
+      <div class="system-menu-panel">
+        <button type="button" id="exportBtn">Export CSV</button>
+        <button type="button" id="detailExportBtn" hidden>Export Details</button>
+        <button type="button" id="restoreCountsBtn" disabled>Restore Counted CSV</button>
+        <input type="file" id="restoreCountsFile" accept=".csv,text/csv" hidden>
+        <div class="inventory-status" id="restoreCountsStatus" role="status"></div>
+        <div class="system-menu-cleanup">
+          <button type="button" id="clearBtn" disabled>Clear Counts</button>
+          <button type="button" id="clearInventoryBtn" disabled>Clear Imported Data</button>
+        </div>
+        <div class="inventory-status" id="cleanupStatus" role="status"></div>
+      </div>
+    </details>
   </div>
 
   <main class="app-content">
@@ -525,12 +550,6 @@
         <div class="inventory-status" id="inventoryStatus" role="status"></div>
         <div class="inventory-stats" id="inventoryStats" hidden></div>
       </details>
-      <details class="inventory-tools data-cleanup">
-        <summary>Data Cleanup</summary>
-        <button type="button" id="clearBtn" disabled>Clear Counts</button>
-        <button type="button" id="clearInventoryBtn" disabled>Clear Imported Data</button>
-        <div class="inventory-status" id="cleanupStatus" role="status"></div>
-      </details>
       <div class="history-header" id="historyHeader">
         <div class="history-title">Counted items</div>
         <div class="chevron" id="chevron">&#9660;</div>
@@ -544,13 +563,6 @@
 
   </main>
 
-  <div class="footer">
-    <button class="btn-export" id="exportBtn">Export CSV</button>
-    <button class="btn-export" id="detailExportBtn" hidden>Export Details</button>
-    <button class="btn-export" id="restoreCountsBtn" disabled>Restore Counted CSV</button>
-    <input type="file" id="restoreCountsFile" accept=".csv,text/csv" hidden>
-  </div>
-  <div class="save-note" id="restoreCountsStatus" role="status"></div>
   <div class="save-note">Progress auto-saves to this browser</div>
 </div>
 
@@ -631,6 +643,7 @@
   const exportBtn = el('exportBtn');
   const clearBtn = el('clearBtn');
   const cleanupStatus = el('cleanupStatus');
+  const systemMenu = el('systemMenu');
   const restoreCountsBtn = el('restoreCountsBtn');
   const restoreCountsFile = el('restoreCountsFile');
   const restoreCountsStatus = el('restoreCountsStatus');
@@ -1243,6 +1256,8 @@
     seenLog = [];
     updateLock(0);
     scanning = true;
+    systemMenu.open = false;
+    systemMenu.hidden = true;
     cameraStartup = (async () => {
       const ok = await tryNative();
       if(!ok && scanning) await startQuagga();
@@ -1256,6 +1271,7 @@
       console.error(e);
     }finally{
       cameraStartup = null;
+      systemMenu.hidden = scanning;
       startBtn.disabled = false;
     }
   }
@@ -1271,6 +1287,7 @@
 
   function stopScanning(){
     scanning = false;
+    systemMenu.hidden = Boolean(cameraStartup);
     if(engine === 'quagga'){
       try{ Quagga.offDetected(handleQuagga); Quagga.stop(); }catch(e){}
     }
@@ -1415,6 +1432,16 @@
   qtyInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrent(); } });
   qtyMinus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') - 1).toString(); });
   qtyPlus.addEventListener('click', () => { qtyInput.value = (parseFloat(qtyInput.value||'0') + 1).toString(); });
+
+  document.addEventListener('click', event => {
+    if(systemMenu.open && !systemMenu.contains(event.target)) systemMenu.open = false;
+  });
+  systemMenu.addEventListener('keydown', event => {
+    if(event.key === 'Escape' && systemMenu.open){
+      systemMenu.open = false;
+      systemMenu.querySelector('summary').focus();
+    }
+  });
 
   startBtn.addEventListener('click', startScanning);
   stopBtn.addEventListener('click', stopScanning);
